@@ -14,7 +14,7 @@ Permite a **docentes**, **estudiantes** y **representantes** acceder a contenido
 - 💬 **Participación en foros y encuestas de mejora**
 
 ---
-## 🛠 Tecnologías utilizadas
+## Tecnologías utilizadas
 
 - **Backend**: PHP 8.2  
 - **Base de datos**: PostgreSQL 17 (con PgAdmin 4 para gestión gráfica)  
@@ -24,7 +24,7 @@ Permite a **docentes**, **estudiantes** y **representantes** acceder a contenido
 
 ---
 
-## ▶️ Cómo ejecutar el proyecto
+## Cómo ejecutar el proyecto
 
 1. **Clona el repositorio**
    ```bash
@@ -35,12 +35,12 @@ Permite a **docentes**, **estudiantes** y **representantes** acceder a contenido
    docker-compose up -d
  3.**Accede a los servicios**
 
-- 🔐 **Login (módulo de autenticación)**  
-  👉 <http://localhost:8080/auth/login.php>  
+- **Login (módulo de autenticación)**  
+  <http://localhost:8080/auth/login.php>  
   Credenciales de prueba: `admin@sieducres.edu` / `admin123`
 
-- 🐘 **PgAdmin (gestión de la base de datos)**  
-  👉 <http://localhost:5050>  
+- **PgAdmin (gestión de la base de datos)**  
+  <http://localhost:5050>  
   Credenciales: `admin@sieducres.edu` / `admin123`
 
 ✅ **Requisito previo**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y ejecutándose.

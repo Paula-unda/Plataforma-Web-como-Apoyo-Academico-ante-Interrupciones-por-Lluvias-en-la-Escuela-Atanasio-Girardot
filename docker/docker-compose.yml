@@ -1,0 +1,38 @@
+services:
+  web:
+    build: ..
+    ports:
+      - "8080:80"
+    volumes:
+      - ../:/var/www/html
+    environment:
+      DB_HOST: db
+      DB_NAME: sieducres
+      DB_USER: postgres
+      DB_PASS: postgres
+
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: sieducres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sieducres.edu
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

@@ -10,7 +10,7 @@ if (isset($_SESSION['usuario_id'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔐 Iniciar Sesión - SIEDUCRES</title>
+    <title>Iniciar Sesión - SIEDUCRES</title>
 
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -181,7 +181,7 @@ if (isset($_SESSION['usuario_id'])) {
         <form action="procesar_login.php" method="POST">
             <div class="mb-3">
                 <label for="correo" class="form-label">Correo electrónico</label>
-                <input type="email" na="comerreo" id="correo" class="form-control" required autofocus>
+                <input type="email" name="correo" id="correo" class="form-control" required autofocus>
             </div>
 
             <div class="mb-3">

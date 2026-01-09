@@ -1,5 +1,5 @@
 <?php
-// auth/funciones.php
+
 
 /**
  * Sanitiza entrada contra XSS
@@ -44,7 +44,7 @@ function sesionActiva() {
  * Redirige según rol
  */
 function redirigirPorRol($rol) {
-    $base = '/sieducres/auth/protegido/';
+    $base = '/auth/protegido/';  
     switch ($rol) {
         case 'Administrador':
             header("Location: {$base}admin/");
@@ -59,7 +59,34 @@ function redirigirPorRol($rol) {
             header("Location: {$base}representante/");
             break;
         default:
-            header("Location: {$base}index.php");
+            header("Location: /auth/login.php?error=Rol+no+soportado.");
+            exit();
     }
     exit();
+}
+/**
+ * Obtiene conexión a la base de datos
+ * @return PDO
+ */
+function getConexion() {
+    static $pdo = null;
+    if ($pdo === null) {
+        $host = $_ENV['DB_HOST'] ?? 'db';
+        $port = $_ENV['DB_PORT'] ?? '5432';
+        $dbname = $_ENV['DB_NAME'] ?? 'sieducres';
+        $user = $_ENV['DB_USER'] ?? 'postgres';
+        $pass = $_ENV['DB_PASS'] ?? 'postgres';
+
+        try {
+            $pdo = new PDO("pgsql:host=$host;port=$port;dbname=$dbname", $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_PERSISTENT => false, // Mejor explícito
+            ]);
+        } catch (PDOException $e) {
+            error_log("Fallo conexión BD: " . $e->getMessage());
+            throw new Exception("Error interno: servicio no disponible.");
+        }
+    }
+    return $pdo;
 }

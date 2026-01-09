@@ -1,5 +1,4 @@
 <?php
-require_once 'conexion.php';
 require_once 'funciones.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -20,7 +19,7 @@ try {
 
     // Consulta preparada para evitar SQL Injection
     $stmt = $pdo->prepare("
-        SELECT id, nombre, correo, contrasena, rol, estadoCuenta 
+        SELECT id, nombre, correo, contrasena, rol, activo 
         FROM usuarios 
         WHERE correo = :correo
     ");
@@ -32,17 +31,19 @@ try {
         exit();
     }
 
-    if ($usuario['estadoCuenta'] !== 'activa') {
-        header('Location: login.php?error=Su+cuenta+no+está+activa.+Contacte+al+administrador.');
+    if (!$usuario['activo']) {
+        header('Location: login.php?error=Su+cuenta+está+desactivada.+Contacte+al+administrador.');
         exit();
     }
-
+    error_log("Hash en BD: '" . $usuario['contrasena'] . "'");
+    error_log("Longitud BD: " . strlen($usuario['contrasena']));
+    error_log("Contraseña ingresada: '" . $contrasena . "'");
     if (!verificarContrasena($contrasena, $usuario['contrasena'])) {
         header('Location: login.php?error=Correo+o+contraseña+incorrectos.');
         exit();
     }
-
-    // ✅ Éxito: iniciar sesión
+    
+    //Éxito: iniciar sesión
     iniciarSesion($usuario['id'], $usuario['nombre'], $usuario['correo'], $usuario['rol']);
     redirigirPorRol($usuario['rol']);
 

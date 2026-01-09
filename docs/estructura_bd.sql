@@ -13,16 +13,29 @@ CREATE TABLE usuarios (
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabla de estudiantes (sin id)
+-- Tabla de estudiantes 
 CREATE TABLE estudiantes (
     usuario_id INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
     grado VARCHAR(10),
     seccion VARCHAR(5)
 );
 
--- Tabla de relación representantes-estudiantes (sin id)
+-- Tabla de relación representantes-estudiantes 
 CREATE TABLE representantes_estudiantes (
     representante_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
     estudiante_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
     PRIMARY KEY (representante_id, estudiante_id)
 );
+
+
+
+
+-- Insertar datos de Administrador para iniciar sesión
+INSERT INTO usuarios (nombre, correo, contrasena, contrasena_temporal, rol)
+VALUES (
+    'Admin SIEDUCRES',
+    'admin@sieducres.edu.ve',
+    crypt('A2026siudecres+', gen_salt('bf')),
+    'A2026siudecres+',
+    'Administrador'
+); 

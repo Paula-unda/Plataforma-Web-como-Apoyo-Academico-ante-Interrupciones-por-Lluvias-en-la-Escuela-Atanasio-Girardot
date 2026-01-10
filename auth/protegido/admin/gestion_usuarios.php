@@ -505,8 +505,11 @@ try {
                                         <a href="editar_usuario.php?id=<?= $usuario['id'] ?>" class="btn-action btn-edit" title="Editar">
                                             <img src="../../../assets/lapiz_editar.svg" alt="Editar" style="width:16px; height:16px;">
                                         </a>
-                                        <a href="eliminar_usuario.php?id=<?= $usuario['id'] ?>" class="btn-action btn-delete" title="Eliminar" onclick="return confirm('¿Estás seguro de eliminar este usuario?');">
-                                            <img src="../../../assets/basurero_borrar.svg" alt="Eliminar" style="width:16px; height:16px;">
+                                        <a href="eliminar_usuario.php?id=<?= $usuario['id'] ?>" 
+                                            class="btn-action btn-delete" 
+                                            title="Eliminar"
+                                            onclick="return confirm('¿Estás seguro de eliminar a <?= addslashes(htmlspecialchars($usuario['nombre'])) ?>? Esta acción no se puede deshacer.');">
+                                                <img src="../../../assets/basurero_borrar.svg" alt="Eliminar" style="width:16px; height:16px;">
                                         </a>
                                         <!--Botón Ver Contraseña-->
                                         <button class="btn-action btn-access" 

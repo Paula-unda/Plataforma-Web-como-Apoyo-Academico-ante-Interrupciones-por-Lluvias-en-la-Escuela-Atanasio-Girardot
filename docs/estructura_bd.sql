@@ -39,3 +39,58 @@ VALUES (
     'A2026siudecres+',
     'Administrador'
 ); 
+
+-- Tabla de contenidos educativos
+CREATE TABLE contenidos (
+    id SERIAL PRIMARY KEY,
+    titulo VARCHAR(255) NOT NULL,
+    descripcion TEXT NOT NULL,
+    fecha_publicacion DATE NOT NULL DEFAULT CURRENT_DATE,
+    archivo_adjunto VARCHAR(255),
+    enlace VARCHAR(500),
+    asignatura VARCHAR(100) NOT NULL,
+    grado VARCHAR(10),
+    seccion VARCHAR(5),
+    docente_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+    activo BOOLEAN DEFAULT true,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para mejorar el rendimiento
+CREATE INDEX idx_contenidos_docente ON contenidos(docente_id);
+CREATE INDEX idx_contenidos_grado_seccion ON contenidos(grado, seccion);
+CREATE INDEX idx_contenidos_fecha ON contenidos(fecha_publicacion DESC);
+
+-- Insertar datos de ejemplo para pruebas
+INSERT INTO contenidos (titulo, descripcion, fecha_publicacion, enlace, asignatura, grado, seccion, docente_id)
+VALUES 
+    (
+        'Introducción a la Matemática',
+        'Clase de recuperación sobre operaciones básicas y fracciones.',
+        '2025-09-05',
+        'https://ejemplo.com/matematicas-clase1',
+        'Matemáticas',
+        '1ero',
+        'A',
+        1
+    ),
+    (
+        'Historia de Venezuela',
+        'Repaso sobre la independencia y figuras históricas importantes.',
+        '2025-09-06',
+        'https://ejemplo.com/historia-clase1',
+        'Historia',
+        '2do',
+        'B',
+        1
+    ),
+    (
+        'Ciencias Naturales',
+        'Clase sobre el sistema solar y los planetas.',
+        '2025-09-07',
+        'https://ejemplo.com/ciencias-clase1',
+        'Ciencias',
+        '3ero',
+        'C',
+        1
+    );

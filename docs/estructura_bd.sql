@@ -30,8 +30,21 @@ CREATE TABLE representantes_estudiantes (
 
 
 
+-- Extensión requerida para funciones criptográficas
+-- Se utiliza para el cifrado seguro de contraseñas mediante bcrypt (crypt + gen_salt)
+-- Requerida por el sistema SIEDUCRES
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+
 -- Insertar datos de Administrador para iniciar sesión
-INSERT INTO usuarios (nombre, correo, contrasena, contrasena_temporal, rol)
+INSERT INTO usuarios (
+    nombre,
+    correo,
+    contrasena,
+    contrasena_temporal,
+    rol,
+    telefono
+)
 VALUES (
     'Admin SIEDUCRES',
     'admin@sieducres.edu.ve',
@@ -94,3 +107,8 @@ VALUES
         'C',
         1
     );
+
+    'Administrador',
+    '+58 4161234567'
+);
+

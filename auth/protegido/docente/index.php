@@ -334,13 +334,21 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
                
             </a>
 
-            <!-- Tarjeta 5: MI PERFIL -->
-            <a href="perfil.php" class="card card-5">
+            <!-- Tarjeta de Encuestas - RUTA CORREGIDA -->
+            <a href="../comun/encuestas_disponibles.php" class="card card-5">
                 <div class="card-icon">
-                    <img src="../../../assets/encuestas.svg" alt="Perfil">
+                    <img src="../../../assets/encuestas.svg" alt="Encuestas">
                 </div>
-                <h2 class="card-title">Mi Perfil</h2>
-                
+                <h2 class="card-title">Encuestas</h2>
+            </a>
+    
+            <!-- Tarjeta para Reportes -->
+            <a href="../comun/reportes.php" class="card card-6">
+                <div class="card-icon">
+                    <img src="../../../assets/reportes.svg" alt="Reportes">
+                </div>
+                <h2 class="card-title">Reportes de Clase</h2>
+                <p class="card-desc">Ver progreso de tus estudiantes</p>
             </a>
         </div>
     </main>

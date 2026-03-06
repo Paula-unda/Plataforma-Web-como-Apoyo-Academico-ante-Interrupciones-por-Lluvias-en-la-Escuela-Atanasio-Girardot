@@ -18,8 +18,13 @@ try {
             u.rol,
             u.activo,
             u.contrasena_temporal,
-            e.grado,
-            e.seccion,
+            -- Datos de estudiantes
+            e.grado as estudiante_grado,
+            e.seccion as estudiante_seccion,
+            -- Datos de docentes (NUEVO)
+            d.grado as docente_grado,
+            d.seccion as docente_seccion,
+            -- Estudiantes asignados a representantes
             STRING_AGG(
                 CONCAT(es.nombre, ' (', COALESCE(esd.grado, 'N/A'), '-', COALESCE(esd.seccion, 'N/A'), ')'),
                 ', '
@@ -27,10 +32,12 @@ try {
             ) AS estudiantes_asignados
         FROM usuarios u
         LEFT JOIN estudiantes e ON u.id = e.usuario_id
+        LEFT JOIN docentes d ON u.id = d.usuario_id  -- ← AGREGAR ESTA LÍNEA
         LEFT JOIN representantes_estudiantes re ON u.id = re.representante_id
         LEFT JOIN usuarios es ON re.estudiante_id = es.id
         LEFT JOIN estudiantes esd ON es.id = esd.usuario_id
-        GROUP BY u.id, u.nombre, u.correo, u.rol, u.activo, u.contrasena_temporal, e.grado, e.seccion
+        GROUP BY u.id, u.nombre, u.correo, u.rol, u.activo, u.contrasena_temporal, 
+                 e.grado, e.seccion, d.grado, d.seccion  -- ← AGREGAR d.grado, d.seccion
         ORDER BY u.nombre
     ");
     $stmt->execute();
@@ -343,6 +350,88 @@ try {
             left: 0;
             right: 0;
         }
+        /* Modal de confirmación (EL MISMO QUE EN PERÍODOS) */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .modal-content h3 {
+            color: var(--primary-pink);
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .modal-btn-confirm {
+            background-color: var(--primary-pink);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .modal-btn-confirm:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        .modal-btn-cancel {
+            background-color: #ccc;
+            color: #333;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .modal-btn-cancel:hover {
+            transform: translateY(-2px);
+            background-color: #bbb;
+        }
+        .btn-secondary {
+            background-color: var(--primary-pink);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -448,6 +537,9 @@ try {
                         class="search-input">
                 </div>
                 <a href="registrar_usuario.php" class="btn-primary">+ Registrar usuario</a>
+                <a href="papelera_usuarios.php" class="btn-secondary" style="background-color: var(--primary-pink); margin-left: 10px;">
+                    Papelera
+                </a>
             </div>
         </div>
 
@@ -475,14 +567,40 @@ try {
                             <tr data-nombre="<?= htmlspecialchars($usuario['nombre']) ?>"
                                 data-correo="<?= htmlspecialchars($usuario['correo']) ?>"
                                 data-rol="<?= htmlspecialchars($usuario['rol']) ?>"
-                                data-detalles="<?= htmlspecialchars(($usuario['rol'] === 'Estudiante') ? ($usuario['grado'] . '-' . $usuario['seccion']) : ($usuario['estudiantes_asignados'] ?? '')) ?>">
-                                <td><?= htmlspecialchars($usuario['nombre']) ?></td>
-                                <td><?= htmlspecialchars($usuario['correo']) ?></td>
-                                <td><?= htmlspecialchars($usuario['rol']) ?></td>
+                                data-detalles="<?= htmlspecialchars(
+                                    ($usuario['rol'] === 'Estudiante') ? 
+                                        ($usuario['estudiante_grado'] . '-' . $usuario['estudiante_seccion']) : 
+                                    (($usuario['rol'] === 'Docente') ?
+                                        ($usuario['docente_grado'] . '-' . $usuario['docente_seccion']) :
+                                        ($usuario['estudiantes_asignados'] ?? '')
+                                    )
+                                ) ?>">
+                                
+                                <!-- Columna 1: NOMBRE -->
+                                <td style="text-align: left;">
+                                    <?= htmlspecialchars($usuario['nombre']) ?>
+                                </td>
+                                
+                                <!-- Columna 2: CORREO -->
+                                <td style="text-align: left;">
+                                    <?= htmlspecialchars($usuario['correo']) ?>
+                                </td>
+                                
+                                <!-- Columna 3: ROL -->
+                                <td>
+                                    <?= htmlspecialchars($usuario['rol']) ?>
+                                </td>
+                                
+                                <!-- Columna 4: DETALLES (grado, sección, estudiantes) -->
                                 <td style="text-align: left; max-width: 250px;">
                                     <?php if ($usuario['rol'] === 'Estudiante'): ?>
-                                        <strong>Grado:</strong> <?= htmlspecialchars($usuario['grado'] ?? '—') ?><br>
-                                        <strong>Sección:</strong> <?= htmlspecialchars($usuario['seccion'] ?? '—') ?>
+                                        <strong>Grado:</strong> <?= htmlspecialchars($usuario['estudiante_grado'] ?? '—') ?><br>
+                                        <strong>Sección:</strong> <?= htmlspecialchars($usuario['estudiante_seccion'] ?? '—') ?>
+                                    
+                                    <?php elseif ($usuario['rol'] === 'Docente'): ?>
+                                        <strong>Grado a cargo:</strong> <?= htmlspecialchars($usuario['docente_grado'] ?? '—') ?><br>
+                                        <strong>Sección a cargo:</strong> <?= htmlspecialchars($usuario['docente_seccion'] ?? '—') ?>
+                                    
                                     <?php elseif ($usuario['rol'] === 'Representante'): ?>
                                         <?php if (!empty($usuario['estudiantes_asignados'])): ?>
                                             <strong>Estudiantes:</strong><br>
@@ -490,10 +608,13 @@ try {
                                         <?php else: ?>
                                             <em>Sin estudiantes asignados</em>
                                         <?php endif; ?>
+                                    
                                     <?php else: ?>
                                         —
                                     <?php endif; ?>
                                 </td>
+                                
+                                <!-- Columna 5: ESTADO -->
                                 <td style="text-align: center;">
                                     <?php if ($usuario['activo']): ?>
                                         <span style="color: #c3d54dff; font-weight: bold;">Activo</span>
@@ -501,23 +622,22 @@ try {
                                         <span style="color: #EF5E8E; font-weight: bold;">Inactivo</span>
                                     <?php endif; ?>
                                 </td>
+                                
+                                <!-- Columna 6: ACCIONES -->
                                 <td>
                                     <div class="action-buttons">
                                         <a href="editar_usuario.php?id=<?= $usuario['id'] ?>" class="btn-action btn-edit" title="Editar">
                                             <img src="../../../assets/lapiz_editar.svg" alt="Editar" style="width:16px; height:16px;">
                                         </a>
-                                        <a href="eliminar_usuario.php?id=<?= $usuario['id'] ?>" 
-                                            class="btn-action btn-delete" 
-                                            title="Eliminar"
-                                            onclick="return confirm('¿Estás seguro de eliminar a <?= addslashes(htmlspecialchars($usuario['nombre'])) ?>? Esta acción no se puede deshacer.');">
-                                                <img src="../../../assets/basurero_borrar.svg" alt="Eliminar" style="width:16px; height:16px;">
-                                        </a>
-                                        <!--Botón Ver Contraseña-->
+                                        <button class="btn-action btn-delete" 
+                                                onclick="confirmarEliminar(<?= $usuario['id'] ?>, '<?= addslashes(htmlspecialchars($usuario['nombre'])) ?>')"
+                                                title="Eliminar">
+                                            <img src="../../../assets/basurero_borrar.svg" alt="Eliminar" style="width:16px; height:16px;">
+                                        </button>
                                         <button class="btn-action btn-access" 
                                                 data-password="<?= htmlspecialchars($usuario['contrasena_temporal'] ?? '—') ?>"
                                                 data-user="<?= htmlspecialchars($usuario['nombre']) ?>"
                                                 title="Ver contraseña temporal">
-                                            <!-- Ícono de LLAVE -->
                                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                                 <path d="M8 1a2 2 0 0 1 2 2v2H6V3a2 2 0 0 1 2-2zm3 6V5a3 3 0 0 0-6 0v2a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
                                             </svg>
@@ -531,10 +651,29 @@ try {
             </table>
         </div>
     </main>
+    <!-- Modal de confirmación para eliminar -->
+    <div class="modal" id="modalEliminar">
+        <div class="modal-content">
+            <h3>Confirmar Eliminación</h3>
+            <p id="modal-mensaje">¿Estás seguro de que deseas eliminar este usuario?</p>
+            <p style="font-size: 12px; color: #999; margin-top: 10px; margin-bottom: 15px;">
+                Esta acción no se puede deshacer y eliminará todos los datos asociados.
+            </p>
+            
+            <form method="POST" action="eliminar_usuario_con_respaldo.php" id="formEliminar">
+                <input type="hidden" name="id" id="usuario_id_eliminar">
+                
+                <div class="modal-buttons">
+                    <button type="button" class="modal-btn-cancel" onclick="cerrarModal()">Cancelar</button>
+                    <button type="submit" class="modal-btn-confirm">Sí, eliminar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Pie de página -->
     <footer class="footer">
-        <span>v2.0.0</span>
+        <span>v1.0.0</span>
         <span>Soporte Técnico</span>
     </footer>
 
@@ -576,16 +715,8 @@ try {
             });
         });
 
-        // Popup de contraseña 
+        // POPUP DE CONTRASEÑA - VERSIÓN SIMPLIFICADA
         let currentPassPopup = null;
-
-        // Cerrar popup si se hace clic fuera
-        document.addEventListener('click', function(e) {
-            if (currentPassPopup && !e.target.closest('.btn-access') && !e.target.closest('.password-popup')) {
-                currentPassPopup.remove();
-                currentPassPopup = null;
-            }
-        });
 
         // Configurar todos los botones .btn-access
         document.querySelectorAll('.btn-access').forEach(button => {
@@ -593,67 +724,87 @@ try {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                // Si ya hay un popup abierto, cerrarlo y salir
+                // Cerrar popup anterior si existe
                 if (currentPassPopup) {
                     currentPassPopup.remove();
                     currentPassPopup = null;
                     return;
                 }
 
-                const password = this.getAttribute('data-password') || '—';
+                const password = this.getAttribute('data-password') || '';
                 const user = this.getAttribute('data-user') || 'Usuario';
+                
+                // Verificar si hay contraseña
+                if (!password || password === '—') {
+                    alert('❌ Este usuario no tiene contraseña temporal');
+                    return;
+                }
+                
+                // Obtener posición del botón
                 const rect = this.getBoundingClientRect();
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
                 
                 // Crear popup
                 const popup = document.createElement('div');
                 popup.className = 'password-popup';
                 popup.innerHTML = `
-                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">
-                        Contraseña de <strong>${user}</strong>
+                    <div style="font-size:13px; color:#666; margin-bottom:8px;">
+                        <strong>${user}</strong>
                     </div>
                     <div style="
-                        font-family: 'Inter', sans-serif;
-                        font-weight: 600;
-                        font-size: 15px;
-                        background: var(--canvas-bg);
-                        padding: 6px 10px;
-                        border-radius: 4px;
-                        margin: 4px 0;
-                        letter-spacing: 0.5px;
-                        color: var(--text-main);
+                        background: #f0f0f0;
+                        padding: 12px;
+                        border-radius: 6px;
+                        font-family: monospace;
+                        font-size: 16px;
+                        font-weight: bold;
+                        color: #333;
+                        border: 2px solid var(--primary-purple);
+                        word-break: break-all;
                     ">${password}</div>
+                    <div style="font-size:11px; color:#999; margin-top:8px;">
+                        Click fuera para cerrar
+                    </div>
                 `;
-
-                // Calcular posición para que no se salga de la pantalla
-                const viewportWidth = window.innerWidth;
-                const popupWidth = 220;
-                let leftPos = rect.left;
                 
-                if (rect.left + popupWidth > viewportWidth) {
-                    leftPos = viewportWidth - popupWidth - 10;
-                }
-                
-                popup.style.top = (rect.top - popup.offsetHeight - 8) + 'px'; 
-                popup.style.left = Math.max(10, leftPos) + 'px';
+                // Posicionar el popup (encima del botón)
+                popup.style.position = 'absolute';
+                popup.style.top = (rect.top + scrollTop - popup.offsetHeight - 10) + 'px';
+                popup.style.left = (rect.left + scrollLeft - 100 + (rect.width/2)) + 'px';
                 popup.style.zIndex = '10000';
-
+                popup.style.minWidth = '200px';
+                
+                // Ajustar si se sale de la pantalla
+                setTimeout(() => {
+                    const popupRect = popup.getBoundingClientRect();
+                    if (popupRect.top < 10) {
+                        popup.style.top = (rect.bottom + scrollTop + 10) + 'px';
+                    }
+                    if (popupRect.left < 10) {
+                        popup.style.left = '10px';
+                    }
+                    if (popupRect.right > window.innerWidth - 10) {
+                        popup.style.left = (window.innerWidth - popupRect.width - 20) + 'px';
+                    }
+                }, 10);
+                
                 document.body.appendChild(popup);
                 currentPassPopup = popup;
-
-                // Añadir evento para cerrar al hacer clic fuera
-                const closePopup = (e) => {
-                    if (!popup.contains(e.target) && !button.contains(e.target)) {
-                        popup.remove();
-                        currentPassPopup = null;
-                        document.removeEventListener('click', closePopup);
-                    }
-                };
+                
+                // Cerrar al hacer clic fuera
                 setTimeout(() => {
-                    document.addEventListener('click', closePopup);
+                    document.addEventListener('click', function cerrar(e) {
+                        if (!popup.contains(e.target) && e.target !== button) {
+                            popup.remove();
+                            currentPassPopup = null;
+                            document.removeEventListener('click', cerrar);
+                        }
+                    });
                 }, 100);
             });
-
-            // Eliminar el outline al hacer clic (y al enfocar)
+            
+            // Quitar outline al hacer focus
             button.addEventListener('focus', function() {
                 this.style.outline = 'none';
             });
@@ -661,6 +812,6 @@ try {
 
 
     </script>
-
+>
 </body>
 </html>

@@ -55,14 +55,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (empty($rol)) throw new Exception('El rol es obligatorio.');
         if (!in_array($rol, ['Administrador', 'Docente', 'Estudiante', 'Representante'])) throw new Exception('Rol no válido.');
-        
+        // ✅ NUEVA VALIDACIÓN PARA DOCENTE
+
 
         // Validaciones por rol
         if ($rol === 'Estudiante') {
             if (empty($grado)) throw new Exception('El grado es obligatorio para estudiantes.');
             if (empty($seccion)) throw new Exception('La sección es obligatoria para estudiantes.');
         }
-
+        if ($rol === 'Docente') {
+            $grado_docente = trim($_POST['grado_docente'] ?? '');
+            $seccion_docente = trim($_POST['seccion_docente'] ?? '');
+            
+            if (empty($grado_docente)) throw new Exception('El grado es obligatorio para docentes.');
+            if (empty($seccion_docente)) throw new Exception('La sección es obligatoria para docentes.');
+        }
         // Obtener contraseña (puede ser la generada o editada)
         $contrasena_plana = trim($_POST['contrasena'] ?? '');
         if (empty($contrasena_plana)) {
@@ -104,7 +111,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':grado' => $grado,
                 ':seccion' => $seccion
             ]);
-        } elseif ($rol === 'Representante') {
+        } 
+        elseif ($rol === 'Docente') {
+            $grado_docente = $_POST['grado_docente'] ?? '';
+            $seccion_docente = $_POST['seccion_docente'] ?? '';
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO docentes (usuario_id, grado, seccion) 
+                VALUES (:usuario_id, :grado, :seccion)
+            ");
+            $stmt->execute([
+                ':usuario_id' => $usuario_id,
+                ':grado' => $grado_docente,
+                ':seccion' => $seccion_docente
+            ]);
+        } 
+        elseif ($rol === 'Representante') {
             $estudiantes_seleccion_str = $_POST['estudiantes_seleccion'] ?? '';
             $estudiantes_seleccion = !empty($estudiantes_seleccion_str) ? explode(',', $estudiantes_seleccion_str) : [];
 
@@ -654,6 +676,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     </div>
                 </div>
+                <!-- ✅ NUEVO: Campos para Docente -->
+                <div id="camposDocente" class="conditional-fields" style="display:none;">
+                    <div class="conditional-title" style="color: var(--primary-lime);">Asignación de grado y sección</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="grado_docente">Grado a cargo *</label>
+                            <select id="grado_docente" name="grado_docente" class="form-control form-select">
+                                <option value="">Seleccionar</option>
+                                <option value="1ro">1ro</option>
+                                <option value="2do">2do</option>
+                                <option value="3ero">3ero</option>
+                                <option value="4to">4to</option>
+                                <option value="5to">5to</option>
+                                <option value="6to">6to</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="seccion_docente">Sección a cargo *</label>
+                            <select id="seccion_docente" name="seccion_docente" class="form-control form-select">
+                                <option value="">Seleccionar</option> 
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="U">Única</option>
+                            </select>
+                        </div>
+                    </div>
+                    <small class="text-muted">El docente solo podrá ver y gestionar contenidos de este grado y sección.</small>
+                </div>
 
                 <div id="camposRepresentante" class="conditional-fields" style="display:none;">
                     <div class="conditional-title">Estudiantes a cargo</div>
@@ -695,28 +747,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         function mostrarCamposCondicionales() {
             const rol = document.getElementById('rol').value;
-            const gradoSelect = document.getElementById('grado');
-            const seccionSelect = document.getElementById('seccion');
+            const gradoEst = document.getElementById('grado');
+            const seccionEst = document.getElementById('seccion');
+            const gradoDoc = document.getElementById('grado_docente');
+            const seccionDoc = document.getElementById('seccion_docente');
             
-
+            // Ocultar todos primero
+            document.getElementById('camposEstudiante').style.display = 'none';
+            document.getElementById('camposDocente').style.display = 'none';
+            document.getElementById('camposRepresentante').style.display = 'none';
+            
+            // Remover required de todos
+            if (gradoEst) gradoEst.removeAttribute('required');
+            if (seccionEst) seccionEst.removeAttribute('required');
+            if (gradoDoc) gradoDoc.removeAttribute('required');
+            if (seccionDoc) seccionDoc.removeAttribute('required');
+            
+            // Mostrar según rol
             if (rol === 'Estudiante') {
                 document.getElementById('camposEstudiante').style.display = 'block';
-                gradoSelect.setAttribute('required', 'required');
-                seccionSelect.setAttribute('required', 'required');
-            } else {
-                
-                document.getElementById('camposEstudiante').style.display = 'none';
-                gradoSelect.removeAttribute('required');
-                seccionSelect.removeAttribute('required');
-                
-
-                gradoSelect.value = '';
-                seccionSelect.value = '';
+                gradoEst.setAttribute('required', 'required');
+                seccionEst.setAttribute('required', 'required');
+            } 
+            else if (rol === 'Docente') {
+                document.getElementById('camposDocente').style.display = 'block';
+                gradoDoc.setAttribute('required', 'required');
+                seccionDoc.setAttribute('required', 'required');
             }
-            
-            // Mostrar/Ocultar campos de representante
-            document.getElementById('camposRepresentante').style.display = 
-                rol === 'Representante' ? 'block' : 'none';
+            else if (rol === 'Representante') {
+                document.getElementById('camposRepresentante').style.display = 'block';
+            }
         }
 
         // Ejecutar al cargar y al cambiar

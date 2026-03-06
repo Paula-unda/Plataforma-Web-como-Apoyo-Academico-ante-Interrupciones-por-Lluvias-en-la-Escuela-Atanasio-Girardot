@@ -328,11 +328,20 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
                 <h2 class="card-title">Foro</h2>
             </a>
 
-            <a href="perfil.php" class="card card-5">
+            <!-- Tarjeta de Encuestas - RUTA CORREGIDA -->
+            <a href="../comun/encuestas_disponibles.php" class="card card-5">
                 <div class="card-icon">
                     <img src="../../../assets/encuestas.svg" alt="Encuestas">
                 </div>
-                <h2 class="card-title">Mi Perfil</h2>
+                <h2 class="card-title">Encuestas</h2>
+                <p class="card-desc">Responder encuestas de satisfacción</p>
+            </a>
+            <!-- Tarjeta para Mi Historial -->
+            <a href="../comun/reportes.php" class="card card-6">
+                <div class="card-icon">
+                    <img src="../../../assets/historial.svg" alt="Historial">
+                </div>
+                <h2 class="card-title">Mi Historial Académico</h2>
                 
             </a>
         </div>

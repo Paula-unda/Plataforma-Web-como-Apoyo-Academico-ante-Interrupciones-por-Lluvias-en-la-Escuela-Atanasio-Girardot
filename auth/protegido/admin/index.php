@@ -6,6 +6,14 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
     exit();
 }
+
+// Obtener estadísticas para mostrar
+$conexion = getConexion();
+
+$total_usuarios = $conexion->query("SELECT COUNT(*) FROM usuarios WHERE activo = true")->fetchColumn();
+$total_estudiantes = $conexion->query("SELECT COUNT(*) FROM estudiantes")->fetchColumn();
+$total_docentes = $conexion->query("SELECT COUNT(*) FROM docentes")->fetchColumn();
+$total_actividades = $conexion->query("SELECT COUNT(*) FROM actividades WHERE activo = true")->fetchColumn();
 ?>
 
 <!DOCTYPE html>
@@ -24,7 +32,6 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
         }
 
         :root {
-            --primary: #4BC4E7;      
             --text-dark: #333333;
             --text-muted: #666666;
             --border: #E0E0E0;
@@ -152,35 +159,68 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             font-size: 18px;
             color: var(--text-muted);
         }
+
         /* Tarjetas */
         .main-content {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             padding: 40px 20px;
         }
 
-        .card-grid {
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 320px));
-            gap: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #4a90e2, #6fb1fc);
+            border-radius: 12px;
+            padding: 20px;
+            color: white; /* Los números en blanco */
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: white;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+            color: white;
+        }
+
+        .card-grid {
+            display: flex;
+            gap: 20px;
             justify-content: center;
+            flex-wrap: wrap;
+            max-width: 1600px;
+            width: 100%;
         }
 
         .card {
-            background: var(--primary);
+            background: linear-gradient(135deg, #4a90e2, #6fb1fc);
             border-radius: 16px;
             padding: 32px 24px;
             text-align: center;
-            color: white;
+            color: #000000; /* TEXTO NEGRO */
             text-decoration: none;
             display: block;
             box-shadow: 0 6px 16px rgba(0,0,0,0.1);
             transition: transform 0.3s, box-shadow 0.3s;
-            width: 100%;
-            max-width: 320px;
+            min-width: 240px;
+            max-width: 280px;
+            flex: 1;
         }
 
         .card:hover {
@@ -188,33 +228,42 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             box-shadow: 0 10px 24px rgba(0,0,0,0.15);
         }
 
+        /* Gradientes para cada tarjeta */
+        .card-1 { background: linear-gradient(135deg, #f36c7b, #f89ca6); } /* Rojo/rosado */
+        .card-2 { background: linear-gradient(135deg, #24d4dc, #5ce0e6); } /* Celeste */
+        .card-3 { background: linear-gradient(135deg, #cbd74f, #d7e07a); } /* Verde/amarillo */
+        .card-4 { background: linear-gradient(135deg, #a78bfe, #c0a9ff); } /* Púrpura */
+        .card-5 { background: linear-gradient(135deg, #f36c7b, #f89ca6); } /* Rojo/rosado */
+        .card-6 { background: linear-gradient(135deg, #24d4dc, #5ce0e6); } /* Celeste */
+
         .card-icon {
-            width: 80px;
-            height: 80px;
+            width: 120px;
+            height: 120px;
             margin: 0 auto 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .card-icon img {
-            width: 48px;
-            height: 48px;
+            width: 80px;
+            height: 80px;
             object-fit: contain;
+            /* QUITADO EL FILTRO BLANCO - ahora los íconos mantienen su color original */
         }
 
         .card-title {
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 8px;
+            color: #000000; /* NEGRO */
         }
 
         .card-desc {
             font-size: 14px;
             opacity: 0.9;
             line-height: 1.5;
+            color: #000000; /* NEGRO */
         }
 
         /* Pie de página fijo */
@@ -234,6 +283,19 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             right: 0;
         }
 
+        @media (max-width: 1200px) {
+            .card-grid {
+                flex-direction: column;
+                align-items: center;
+            }
+            .card {
+                width: 100%;
+                max-width: 320px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
 
         @media (max-width: 768px) {
             .banner-title { font-size: 28px; }
@@ -249,10 +311,10 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
         </div>
         <div class="header-right">
-            <div class="icon-btn">
+            <div class="icon-btn" onclick="window.location.href='../comun/notificaciones.php'">
                 <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
             </div>
-            <div class="icon-btn">
+            <div class="icon-btn" onclick="window.location.href='perfil.php'">
                 <img src="../../../assets/icon-user.svg" alt="Perfil">
             </div>
             <div class="icon-btn" id="menu-toggle">
@@ -262,36 +324,87 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             </div>
 
             <div class="menu-dropdown" id="dropdown">
+                <a href="perfil.php" class="menu-item">Mi Perfil</a>
+                <a href="../comun/notificaciones.php" class="menu-item">Notificaciones</a>
                 <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
             </div>
         </div>
     </header>
 
     <!-- Banner -->
-       <div class="banner">
-           <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
-       </div>   
-       <!-- Contenido -->
-       <div class="banner-content">
-           <h1 class="banner-title">¡Bienvenidos a SIEDUCRES!</h1>
-           <p class="banner-subtitle">Plataforma para la recuperación de clases interrumpidas por condiciones climáticas</p>
-       </div>
+    <div class="banner">
+        <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
+    </div>
     
+    <!-- Contenido -->
+    <div class="banner-content">
+        <h1 class="banner-title">¡Bienvenido, <?php echo htmlspecialchars($_SESSION['usuario_nombre'] ?? 'Administrador'); ?>!</h1>
+        <p class="banner-subtitle">Panel de control y administración general del sistema</p>
+    </div>
 
-    <!-- Tarjetas -->
-    <main class="main-content">
+    <!-- Estadísticas rápidas -->
+    <div class="main-content">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number"><?php echo $total_usuarios; ?></div>
+                <div class="stat-label">Usuarios Activos</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f36c7b, #f89ca6);">
+                <div class="stat-number"><?php echo $total_estudiantes; ?></div>
+                <div class="stat-label">Estudiantes</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #24d4dc, #5ce0e6);">
+                <div class="stat-number"><?php echo $total_docentes; ?></div>
+                <div class="stat-label">Docentes</div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #cbd74f, #d7e07a);">
+                <div class="stat-number"><?php echo $total_actividades; ?></div>
+                <div class="stat-label">Actividades</div>
+            </div>
+        </div>
+
+        <!-- Tarjetas de navegación - SOLO 6 TARJETAS -->
         <div class="card-grid">
-            <a href="gestion_usuarios.php" class="card">
+            <!-- Tarjeta 1: GESTIÓN DE USUARIOS -->
+            <a href="gestion_usuarios.php" class="card card-1">
                 <div class="card-icon">
-                    <img src="../../../assets/icon-card.svg" alt="Gestión de Usuarios">
+                    <img src="../../../assets/icon-user.svg" alt="Usuarios">
                 </div>
                 <h2 class="card-title">Gestión de Usuarios</h2>
-                <p class="card-desc">Registrar, editar y eliminar usuarios del sistema.</p>
+                <p class="card-desc">Administrar estudiantes, docentes y representantes</p>
             </a>
-        </div>
-    </main>
 
-    <!--Pie de página -->
+            <!-- Tarjeta 2: PERÍODOS ESCOLARES -->
+            <a href="periodos.php" class="card card-2">
+                <div class="card-icon">
+                    <img src="../../../assets/calendario.svg" alt="Períodos" onerror="this.src='https://via.placeholder.com/80x80?text=📅'">
+                </div>
+                <h2 class="card-title">Períodos Escolares</h2>
+                <p class="card-desc">Gestionar lapsos y períodos académicos</p>
+            </a>
+
+            <!-- Tarjeta 4: ENCUESTAS -->
+            <a href="encuestas.php" class="card card-4">
+                <div class="card-icon">
+                    <img src="../../../assets/encuestas_negro.svg" alt="Encuestas">
+                </div>
+                <h2 class="card-title">Encuestas</h2>
+                <p class="card-desc">Crear y gestionar encuestas de satisfacción</p>
+            </a>
+
+            <!-- Tarjeta 5: REPORTES -->
+            <a href="../comun/reportes.php" class="card card-5">
+                <div class="card-icon">
+                    <img src="../../../assets/reportes.svg" alt="Reportes" onerror="this.src='https://via.placeholder.com/80x80?text=📈'">
+                </div>
+                <h2 class="card-title">Reportes</h2>
+                <p class="card-desc">Generar reportes de participación y académicos</p>
+            </a>
+
+        </div>
+    </div>
+
+    <!-- Pie de página -->
     <footer class="footer">
         <span>v2.0.0</span>
         <span>Soporte Técnico</span>
@@ -299,7 +412,8 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
 
     <script>
         // Toggle menú hamburguesa
-        document.getElementById('menu-toggle').addEventListener('click', function() {
+        document.getElementById('menu-toggle').addEventListener('click', function(e) {
+            e.stopPropagation();
             const dropdown = document.getElementById('dropdown');
             dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
         });
@@ -313,6 +427,5 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
             }
         });
     </script>
-
 </body>
 </html>

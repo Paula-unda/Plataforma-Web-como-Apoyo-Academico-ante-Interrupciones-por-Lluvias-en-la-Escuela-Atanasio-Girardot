@@ -1,6 +1,13 @@
 <?php
 session_start();
+date_default_timezone_set('America/Caracas'); // o la zona horaria de tu país
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
+
+// Recuperar mensajes de sesión (si existen)
+$mensaje_exito = $_SESSION['mensaje_exito'] ?? '';
+$mensaje_error = $_SESSION['mensaje_error'] ?? '';
+unset($_SESSION['mensaje_exito'], $_SESSION['mensaje_error']);
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -31,27 +38,81 @@ if (!in_array($actividad['tipo'], $tipos_permitidos)) {
 // ✅ Verificar si ya hay entrega
 $entrega = obtenerEntregaEstudiante($actividad_id, $_SESSION['usuario_id']);
 
-// ✅ Verificar si puede reentregar (solo dentro de 15 minutos después de enviar)
+// ✅ Verificar si puede reentregar (solo dentro de 15 minutos después de enviar O si el docente reabrió)
 $puede_entregar = false;
 $tiempo_para_borrar = 0;
+$diferencia_minutos = 0;
 
 if (!$entrega) {
+    // No hay entrega, puede entregar
     $puede_entregar = true;
+    error_log("📝 No hay entrega previa - Puede entregar");
 } elseif ($entrega['estado'] === 'calificado') {
+    // Si ya está calificado, no puede entregar
     $puede_entregar = false;
+    error_log("📝 Entrega calificada - No puede modificar");
+} elseif ($entrega['estado'] === 'pendiente') {
+    // Si el docente reabrió, puede entregar
+    $puede_entregar = true;
+    
+    // Verificar si ya tiene fecha de entrega (por si acaso)
+    if (empty($entrega['fecha_entrega'])) {
+        // Es una reapertura fresca, dar 15 minutos completos
+        $tiempo_para_borrar = 15;
+        error_log("📝 Estado pendiente (recién reabierto) - 15 minutos disponibles");
+    } else {
+        // Si ya tenía fecha (caso raro), calcular tiempo restante
+        $fecha_limpia = preg_replace('/\..*/', '', $entrega['fecha_entrega']);
+        $fecha_entrega_timestamp = strtotime($fecha_limpia);
+        $tiempo_actual = time();
+        $diferencia_minutos = ($tiempo_actual - $fecha_entrega_timestamp) / 60;
+        
+        if ($diferencia_minutos > 180) {
+            $diferencia_minutos = $diferencia_minutos - 240;
+        }
+        
+        $tiempo_restante = 15 - $diferencia_minutos;
+        $tiempo_para_borrar = $tiempo_restante > 0 ? ceil($tiempo_restante) : 0;
+        
+        if ($tiempo_para_borrar <= 0) {
+            $puede_entregar = false;
+        }
+        error_log("📝 Estado pendiente con fecha - Tiempo restante: $tiempo_para_borrar min");
+    }
+
 } else {
-    $fecha_entrega = strtotime($entrega['fecha_entrega']);
+    // Si es 'enviado' o 'atrasado', calcular tiempo exacto
+    // Limpiar la fecha (eliminar los milisegundos .754753)
+    $fecha_limpia = preg_replace('/\..*/', '', $entrega['fecha_entrega']);
+    $fecha_entrega_timestamp = strtotime($fecha_limpia);
     $tiempo_actual = time();
-    $diferencia_minutos = ($tiempo_actual - $fecha_entrega) / 60;
+    
+    // 🔴 COMPENSAR DIFERENCIA DE ZONA HORARIA
+    // Si la diferencia es muy grande (> 180 minutos), asumimos que es por zona horaria
+    $diferencia_minutos = ($tiempo_actual - $fecha_entrega_timestamp) / 60;
+    
+    // Si la diferencia es mayor a 3 horas (180 minutos), restamos 4 horas (240 minutos)
+    if ($diferencia_minutos > 180) {
+        $diferencia_minutos = $diferencia_minutos - 240;
+    }
+    
+    error_log("📝 Estado: " . $entrega['estado']);
+    error_log("📝 Fecha original: " . $entrega['fecha_entrega']);
+    error_log("📝 Fecha limpia: " . $fecha_limpia);
+    error_log("📝 Timestamp entrega: " . $fecha_entrega_timestamp);
+    error_log("📝 Timestamp actual: " . $tiempo_actual);
+    error_log("📝 Diferencia minutos (cruda): " . (($tiempo_actual - $fecha_entrega_timestamp) / 60));
+    error_log("📝 Diferencia minutos (corregida): " . $diferencia_minutos);
     
     if ($diferencia_minutos <= 15) {
         $puede_entregar = true;
         $tiempo_para_borrar = ceil(15 - $diferencia_minutos);
+        error_log("✅ DENTRO de 15 minutos - Puede modificar. Tiempo restante: $tiempo_para_borrar min");
     } else {
         $puede_entregar = false;
+        error_log("❌ FUERA de 15 minutos - No puede modificar. Diferencia: $diferencia_minutos min");
     }
 }
-
 // Determinar estado visual
 $estado_texto = $entrega ? $entrega['estado'] : 'pendiente';
 $estado_badge = '';
@@ -71,18 +132,24 @@ switch ($estado_texto) {
 }
 
 // Obtener contenidos vinculados
+// Obtener contenidos vinculados (intento con función)
 $contenidos_vinculados = obtenerContenidosDeActividad($actividad_id);
 
-// ✅ Determinar si hay contenido vinculado para el botón
-$hay_contenido_vinculado = !empty($contenidos_vinculados);
-$primer_contenido_id = $hay_contenido_vinculado ? $contenidos_vinculados[0]['id'] : null;
-// ✅ DEBUG - Verificar en logs
-error_log("=== DEBUG CONTENIDOS VINCULADOS ===");
-error_log("Actividad ID: " . $actividad_id);
-error_log("Contenidos vinculados: " . count($contenidos_vinculados));
-if ($hay_contenido_vinculado) {
-    error_log("Primer contenido ID: " . $primer_contenido_id);
-    error_log("Primer contenido título: " . $contenidos_vinculados[0]['titulo']);
+// Obtener contenidos vinculados - CONSULTA DIRECTA
+try {
+    $conexion = getConexion();
+    $query = "
+        SELECT c.*
+        FROM actividades_contenidos ac
+        INNER JOIN contenidos c ON ac.contenido_id = c.id
+        WHERE ac.actividad_id = :id
+    ";
+    $stmt = $conexion->prepare($query);
+    $stmt->execute(['id' => $actividad_id]);
+    $contenidos_vinculados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log("Error en consulta directa: " . $e->getMessage());
+    $contenidos_vinculados = [];
 }
 ?>
 
@@ -93,6 +160,7 @@ if ($hay_contenido_vinculado) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($actividad['titulo']); ?> - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -483,30 +551,74 @@ if ($hay_contenido_vinculado) {
                 font-size: 11px;
             }
         }
+        @media (max-width: 768px) {
+        .banner-title { font-size: 28px; }
+        .banner { height: 160px; }
+        .info-card { padding: 24px; }
+        .content-title { font-size: 24px; }
+        .botones-accion { flex-direction: column; }
+        .botones-accion .btn { width: 100%; text-align: center; }
+        
+        /* ✅ CORRECCIÓN: Descripción no se sale del contenedor */
+        .content-description {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+            max-width: 100%;
+            padding: 0 5px;
+        }
+        
+        /* ✅ Asegurar que todo el contenido respete los límites */
+        .content-container,
+        .info-card,
+        .content-description,
+        .estado-section,
+        .vinculados-section,
+        .entrega-section {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+        
+        /* ✅ Tabla responsive mejorada */
+        .estado-entrega-table {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .estado-entrega-table table {
+            min-width: 100%;
+        }
+        
+        .estado-entrega-table td {
+            word-break: break-word;
+        }
+    }
+    @media (max-width: 480px) {
+        .estado-entrega-table td {
+            padding: 8px 6px;
+            font-size: 11px;
+        }
+        
+        .estado-entrega-table td:first-child {
+            width: 45%;
+            font-size: 11px;
+        }
+        
+        .estado-entrega-table .archivo-link {
+            font-size: 11px;
+            word-break: break-all;
+        }
+        
+        /* ✅ Ajuste adicional para descripción */
+        .content-description {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
@@ -518,6 +630,19 @@ if ($hay_contenido_vinculado) {
 
     <main class="main-content">
         <div class="content-container">
+            
+            <!-- Mensajes de éxito/error desde sesión -->
+            <?php if ($mensaje_exito): ?>
+                <div class="mensaje mensaje-exito" style="display: block;">
+                    <?php echo htmlspecialchars($mensaje_exito); ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($mensaje_error): ?>
+                <div class="mensaje mensaje-error" style="display: block;">
+                    <?php echo htmlspecialchars($mensaje_error); ?>
+                </div>
+            <?php endif; ?>
             <div class="info-card">
                 <h1 class="content-title"><?php echo htmlspecialchars($actividad['titulo']); ?></h1>
                 
@@ -550,10 +675,10 @@ if ($hay_contenido_vinculado) {
                     </div>
                     <div>
                         <?php if ($entrega): ?>
-                            <p style="color: var(--text-dark);"> Entregado el: <strong><?php echo date('d/m/Y H:i', strtotime($entrega['fecha_entrega'])); ?></strong></p>
-                            <?php if (!empty($entrega['comentario'])): ?>
-                                <p style="color: var(--text-dark); margin-top: 8px;"><strong>Comentario:</strong> <?php echo htmlspecialchars($entrega['comentario']); ?></p>
-                            <?php endif; ?>
+                            <?php if (!empty($entrega['fecha_entrega'])): ?>
+                                <p style="color: var(--text-dark);"> Entregado el: <strong><?php echo date('d/m/Y H:i', strtotime($entrega['fecha_entrega'])); ?></strong></p>
+                            <?php endif; ?>     
+
                             <!-- ✅ CALIFICACIÓN CON COLORES DEL PROYECTO (Lime/Pink) -->
                             <?php if ($entrega['calificacion'] !== null && $entrega['calificacion'] !== '' && $entrega['calificacion'] >= 0): ?>
                                 <p style="margin-top:12px; font-size:18px; font-weight:700; color: var(--text-dark);">
@@ -609,31 +734,57 @@ if ($hay_contenido_vinculado) {
                             Error al enviar la entrega. Por favor, inténtalo de nuevo.
                         </div>
                         
-                        <form id="form-entrega" enctype="multipart/form-data">
+                        <form action="procesar_entrega.php" method="POST" enctype="multipart/form-data">
                             <input type="hidden" name="actividad_id" value="<?php echo $actividad_id; ?>">
                             
                             <div class="form-group">
                                 <label for="comentario">Comentario (opcional)</label>
-                                <textarea id="comentario" name="comentario" class="form-control" rows="3"></textarea>
+                                <textarea id="comentario" name="comentario" class="form-control" rows="3"><?php echo $entrega ? htmlspecialchars($entrega['comentario'] ?? '') : ''; ?></textarea>
                             </div>
                             
                             <div class="form-group">
                                 <label for="archivo">Archivo de entrega (PDF, DOC, JPG, PNG)</label>
-                                <input type="file" id="archivo" name="archivo" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                                <input type="file" id="archivo" name="archivo" class="form-control" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" <?php echo !$puede_entregar ? 'disabled' : ''; ?>>
+                                <?php if ($entrega && !empty($entrega['archivo_entregado'])): ?>
+                                    <p style="margin-top: 8px; font-size: 13px;">
+                                        Archivo actual: <a href="../../../uploads/entregas/<?php echo htmlspecialchars($entrega['archivo_entregado']); ?>" target="_blank"><?php echo htmlspecialchars(basename($entrega['archivo_entregado'])); ?></a>
+                                    </p>
+                                <?php endif; ?>
                             </div>
                             
-                            <button type="submit" class="btn-submit" id="btn-enviar">Enviar entrega</button>
+                            <button type="submit" class="btn-submit" <?php echo !$puede_entregar ? 'disabled' : ''; ?>>
+                                <?php echo $entrega ? 'Actualizar entrega' : 'Enviar entrega'; ?>
+                            </button>
                         </form>
                     </div>
                 <?php elseif ($entrega && $entrega['estado'] !== 'calificado'): ?>
-                    <!-- ✅ Mensaje cuando YA entregó (fuera de los 15 min) -->
-                    <div class="entrega-section" style="background: #fff3cd; border: 1px solid #0a0a0a;">
-                        <h2 class="entrega-title" style="color: var(--text-dark);"> Tiempo de modificación expirado</h2>
-                        <p style="color: var(--text-muted); margin-top: 12px;">
-                            Ya has entregado esta actividad y ha pasado el tiempo límite de 15 minutos para modificarla. 
-                            Puedes ver el estado de tu entrega en la tabla de abajo.
-                        </p>
-                    </div>
+    
+                    <?php 
+                    // Calcular tiempo transcurrido para mostrar mensaje correcto
+                    $fecha_entrega = strtotime($entrega['fecha_entrega']);
+                    $diferencia_minutos = (time() - $fecha_entrega) / 60;
+                    ?>
+                    
+                    <?php if ($diferencia_minutos <= 15): ?>
+                        <!-- Mensaje cuando DENTRO de los 15 minutos -->
+                        <div class="entrega-section" style="background: #e8f5e9; border: 1px solid #4BC4E7;">
+                            <h2 class="entrega-title" style="color: var(--text-dark);"> ⏳ Puedes modificar tu entrega</h2>
+                            <p style="color: var(--text-muted); margin-top: 12px;">
+                                Ya has entregado esta actividad, pero aún estás dentro de los 15 minutos permitidos para modificarla.
+                                Usa el botón "Borrar entrega" si deseas enviar un nuevo archivo.
+                            </p>
+                        </div>
+                    <?php else: ?>
+                        <!-- Mensaje cuando FUERA de los 15 minutos -->
+                        <div class="entrega-section" style="background: #fff3cd; border: 1px solid #0a0a0a;">
+                            <h2 class="entrega-title" style="color: var(--text-dark);"> Tiempo de modificación expirado</h2>
+                            <p style="color: var(--text-muted); margin-top: 12px;">
+                                Ya has entregado esta actividad y ha pasado el tiempo límite de 15 minutos para modificarla. 
+                                Puedes ver el estado de tu entrega en la tabla de abajo.
+                            </p>
+                        </div>
+                    <?php endif; ?>
+                    
                 <?php elseif ($entrega && $entrega['estado'] === 'calificado'): ?>
                     <!-- ✅ Mensaje cuando ya fue calificado -->
                     <div class="entrega-section" style="background: #e8f5e9; border: 1px solid #c8e6c9;">
@@ -656,8 +807,14 @@ if ($hay_contenido_vinculado) {
                             <td>Fecha y hora de entrega:</td>
                             <td>
                                 <?php 
-                                if ($entrega && !empty($entrega['fecha_entrega'])) {
-                                    echo date('d/m/Y \a \l\a\s H:i', strtotime($entrega['fecha_entrega']));
+                                if ($entrega && !empty($entrega['fecha_entrega']) && $entrega['fecha_entrega'] !== NULL) {
+                                    // Verificar que la fecha sea válida antes de usar strtotime
+                                    $timestamp = strtotime($entrega['fecha_entrega']);
+                                    if ($timestamp && $timestamp > 0) {
+                                        echo date('d/m/Y \a \l\a\s H:i', $timestamp);
+                                    } else {
+                                        echo '<span style="color: var(--text-muted);">—</span>';
+                                    }
                                 } else {
                                     echo '<span style="color: var(--text-muted);">—</span>';
                                 }
@@ -669,7 +826,7 @@ if ($hay_contenido_vinculado) {
                             <td>
                                 <?php 
                                 if ($entrega && !empty($entrega['archivo_entregado'])) {
-                                    echo '<a href="../../uploads/entregas/' . htmlspecialchars($entrega['archivo_entregado']) . '" class="archivo-link" target="_blank" download>';
+                                    echo '<a href="../../../uploads/entregas/' . htmlspecialchars($entrega['archivo_entregado']) . '" class="archivo-link" target="_blank" download>';
                                     echo ' ' . htmlspecialchars(basename($entrega['archivo_entregado']));
                                     echo '</a>';
                                 } else {
@@ -712,25 +869,58 @@ if ($hay_contenido_vinculado) {
                     </table>
                 </div>
 
-                <!-- ✅ BOTONES DE ACCIÓN (DEBAJO DE LA TABLA) -->
-                <div class="botones-accion">
-                    <?php if ($hay_contenido_vinculado): ?>
-                        <a href="contenido_detalle.php?id=<?php echo $primer_contenido_id; ?>" class="btn-primary">
-                             Ir al contenido de estudio
-                        </a>
-                    <?php endif; ?>
-                    
-                    <a href="actividades.php" class="btn-secondary">
+                <!-- ✅ BOTÓN DE CONTENIDO VINCULADO -->
+                <?php if (!empty($contenidos_vinculados)): ?>
+                <div style="margin: 30px 0; text-align: center;">
+                    <a href="contenido_detalle.php?id=<?php echo $contenidos_vinculados[0]['id']; ?>" 
+                    style="display: inline-block; 
+                            background: linear-gradient(135deg, var(--primary-purple), var(--primary-cyan));
+                            color: white; 
+                            padding: 18px 50px; 
+                            border-radius: 60px; 
+                            text-decoration: none; 
+                            font-size: 18px; 
+                            font-weight: 700; 
+                            box-shadow: 0 8px 20px rgba(75, 196, 231, 0.4);
+                            transition: all 0.3s;
+                            border: none;">
+                        📚 VER CONTENIDO DE ESTUDIO: <?php echo htmlspecialchars($contenidos_vinculados[0]['titulo']); ?>
+                    </a>
+                    <p style="color: var(--text-muted); margin-top: 10px; font-size: 14px;">
+                        Contenido vinculado a esta actividad
+                    </p>
+                </div>
+                <?php endif; ?>
+  
+
+                <!-- Botones secundarios -->
+                <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; flex-wrap: wrap;">
+                    <a href="actividades.php" 
+                    style="display: inline-block; 
+                            background: var(--surface); 
+                            color: var(--text-dark); 
+                            padding: 12px 30px; 
+                            border-radius: 30px; 
+                            text-decoration: none; 
+                            font-weight: 600; 
+                            border: 2px solid var(--border);">
                         ← Volver a actividades
                     </a>
                     
                     <?php if ($entrega && $entrega['estado'] !== 'calificado' && $tiempo_para_borrar > 0): ?>
-                        <button type="button" class="btn-danger" id="btn-borrar-entrega" onclick="borrarEntrega()">
-                             Borrar entrega
+                        <button onclick="borrarEntrega()"
+                                style="display: inline-block; 
+                                    background: var(--primary-pink); 
+                                    color: white; 
+                                    padding: 12px 30px; 
+                                    border-radius: 30px; 
+                                    border: none; 
+                                    font-weight: 600; 
+                                    cursor: pointer;">
+                            🗑️ Borrar entrega
                         </button>
                     <?php endif; ?>
                 </div>
-
                 
             </div>
         </div>
@@ -755,57 +945,9 @@ if ($hay_contenido_vinculado) {
             }
         });
 
-        //  Envío de entrega
-        document.getElementById('form-entrega')?.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const btn = document.getElementById('btn-enviar');
-            const form = this;
-            
-            btn.disabled = true;
-            btn.textContent = 'Enviando...';
-            
-            fetch('procesar_entrega.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                console.log('Status:', response.status);
-                return response.json();
-            })
-            .then(data => {
-                console.log('Respuesta:', data);
-                
-                if (data.success) {
-                    document.getElementById('mensaje-exito').style.display = 'block';
-                    document.getElementById('mensaje-error').style.display = 'none';
-                    
-                    btn.disabled = true;
-                    btn.textContent = 'Enviado ✓';
-                    form.querySelectorAll('input, textarea, button').forEach(el => {
-                        el.disabled = true;
-                    });
-                    
-                    setTimeout(() => location.reload(), 2000);
-                } else {
-                    document.getElementById('mensaje-exito').style.display = 'none';
-                    document.getElementById('mensaje-error').textContent = data.error || 'Error al enviar';
-                    document.getElementById('mensaje-error').style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = 'Enviar entrega';
-                }
-            })
-            .catch(error => {
-                console.error('Error completo:', error);
-                document.getElementById('mensaje-error').textContent = 'Error de conexión: ' + error.message;
-                document.getElementById('mensaje-error').style.display = 'block';
-                btn.disabled = false;
-                btn.textContent = 'Enviar entrega';
-            });
-        });
+        
 
-        //  Función para borrar entrega (dentro de 15 minutos)
+        // Función para borrar entrega (dentro de 15 minutos)
         function borrarEntrega() {
             if (!confirm('¿Estás seguro de que deseas borrar tu entrega? Solo puedes hacer esto dentro de los 15 minutos posteriores al envío.')) {
                 return;
@@ -821,15 +963,19 @@ if ($hay_contenido_vinculado) {
             })
             .then(response => response.json())
             .then(data => {
+                console.log('Respuesta borrar:', data);
+                
                 if (data.success) {
-                    alert('Entrega borrada exitosamente. Ahora puedes volver a enviar.');
-                    location.reload();
+                    // ✅ Mostrar mensaje y recargar
+                    alert('✅ Entrega borrada exitosamente');
+                    window.location.href = 'detalle_actividad.php?id=' + <?php echo $actividad_id; ?>;
                 } else {
-                    alert('Error: ' + (data.error || 'No se pudo borrar la entrega'));
+                    alert('❌ Error: ' + (data.error || 'No se pudo borrar la entrega'));
                 }
             })
             .catch(error => {
-                alert('Error de conexión: ' + error.message);
+                console.error('Error:', error);
+                alert('❌ Error de conexión');
             });
         }
     </script>

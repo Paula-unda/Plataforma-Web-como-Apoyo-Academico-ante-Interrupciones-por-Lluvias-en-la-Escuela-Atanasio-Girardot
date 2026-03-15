@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -127,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Editar Actividad - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -373,6 +375,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 16px;
             margin-top: 24px;
         }
+        body {
+            padding-top: 60px;  /* ← ALTURA DEL HEADER */
+        }
         
         @media (max-width: 768px) {
             .banner-title { font-size: 28px; }
@@ -382,29 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="gestion_actividades.php" class="menu-item">Gestión de Actividades</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
@@ -437,7 +420,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select name="tipo" class="form-control" required>
                         <option value="">Seleccionar tipo</option>
                         <option value="tarea" <?php echo $actividad['tipo'] === 'tarea' ? 'selected' : ''; ?>>📝 Tarea</option>
-                        <option value="examen" <?php echo $actividad['tipo'] === 'examen' ? 'selected' : ''; ?>>📋 Examen</option>
                         <option value="indicacion" <?php echo $actividad['tipo'] === 'indicacion' ? 'selected' : ''; ?>>📌 Indicación</option>
                     </select>
                 </div>

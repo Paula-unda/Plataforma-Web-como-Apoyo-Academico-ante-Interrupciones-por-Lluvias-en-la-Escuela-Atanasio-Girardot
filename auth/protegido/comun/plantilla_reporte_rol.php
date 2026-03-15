@@ -18,6 +18,7 @@ $contenidos = $pdf_data['contenidos'];
 $periodo_activo = $pdf_data['periodo_activo'];
 $usuario_rol = $pdf_data['usuario_rol'];
 $usuario_nombre = $pdf_data['usuario_nombre'];
+$estudiante_nombre = $pdf_data['estudiante_nombre'] ?? null;
 ?>
 <!DOCTYPE html>
 <html>
@@ -107,6 +108,8 @@ $usuario_nombre = $pdf_data['usuario_nombre'];
             color: #999;
             font-style: italic;
         }
+        .badge-exito { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 4px; }
+        .badge-info { background: #d1ecf1; color: #0c5460; padding: 2px 6px; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -115,8 +118,11 @@ $usuario_nombre = $pdf_data['usuario_nombre'];
         <div class="info-generacion">
             Generado el <?php echo date('d/m/Y H:i'); ?> por <?php echo htmlspecialchars($usuario_nombre); ?><br>
             Rol: <?php echo $usuario_rol; ?>
+            <?php if ($estudiante_nombre): ?>
+                | Estudiante: <?php echo htmlspecialchars($estudiante_nombre); ?>
+            <?php endif; ?>
             <?php if ($periodo_activo): ?>
-                | Período: <?php echo $periodo_activo['nombre']; ?>
+                | Período: <?php echo htmlspecialchars($periodo_activo['nombre']); ?>
             <?php endif; ?>
         </div>
     </div>
@@ -134,7 +140,7 @@ $usuario_nombre = $pdf_data['usuario_nombre'];
     </div>
     <?php endif; ?>
     
-    <!-- ACTIVIDADES -->
+    <!-- ACTIVIDADES - SEGÚN ROL -->
     <h2>📝 Actividades</h2>
     <?php if (empty($actividades)): ?>
         <p class="mensaje-vacio">No hay actividades para mostrar en este período</p>
@@ -142,32 +148,54 @@ $usuario_nombre = $pdf_data['usuario_nombre'];
     <table>
         <thead>
             <tr>
-                <th>Actividad</th>
-                <th>Tipo</th>
-                <th>Grado</th>
-                <th>Sección</th>
-                <th>Entregas</th>
-                <th>Calificadas</th>
-                <th>Promedio</th>
+                <?php if ($usuario_rol === 'Administrador' || $usuario_rol === 'Docente'): ?>
+                    <th>Actividad</th>
+                    <th>Tipo</th>
+                    <th>Grado</th>
+                    <th>Sección</th>
+                    <th>Entregas</th>
+                    <th>Calificadas</th>
+                    <th>Promedio</th>
+                <?php elseif ($usuario_rol === 'Estudiante' || $usuario_rol === 'Representante'): ?>
+                    <th>Actividad</th>
+                    <th>Tipo</th>
+                    <th>Fecha Entrega</th>
+                    <th>Estado</th>
+                    <th>Calificación</th>
+                <?php endif; ?>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($actividades as $a): ?>
             <tr>
-                <td><?php echo htmlspecialchars($a['titulo']); ?></td>
-                <td><?php echo $a['tipo']; ?></td>
-                <td><?php echo $a['grado']; ?></td>
-                <td><?php echo $a['seccion']; ?></td>
-                <td><?php echo $a['entregas']; ?></td>
-                <td><?php echo $a['calificadas']; ?></td>
-                <td><?php echo $a['promedio'] ?: '-'; ?></td>
+                <?php if ($usuario_rol === 'Administrador' || $usuario_rol === 'Docente'): ?>
+                    <td><?php echo htmlspecialchars($a['titulo'] ?? 'Sin título'); ?></td>
+                    <td><?php echo $a['tipo'] ?? '-'; ?></td>
+                    <td><?php echo $a['grado'] ?? '-'; ?></td>
+                    <td><?php echo $a['seccion'] ?? '-'; ?></td>
+                    <td><?php echo $a['entregas'] ?? 0; ?></td>
+                    <td><?php echo $a['calificadas'] ?? 0; ?></td>
+                    <td><?php echo isset($a['promedio']) ? number_format($a['promedio'], 2) : '-'; ?></td>
+                <?php elseif ($usuario_rol === 'Estudiante' || $usuario_rol === 'Representante'): ?>
+                    <td><?php echo htmlspecialchars($a['titulo'] ?? 'Sin título'); ?></td>
+                    <td><?php echo $a['tipo'] ?? '-'; ?></td>
+                    <td><?php echo isset($a['fecha_entrega']) ? date('d/m/Y', strtotime($a['fecha_entrega'])) : '-'; ?></td>
+                    <td>
+                        <?php 
+                        $estado = $a['estado'] ?? 'pendiente';
+                        $clase = ($estado === 'calificado') ? 'badge-exito' : 'badge-info';
+                        ?>
+                        <span class="<?php echo $clase; ?>"><?php echo ucfirst($estado); ?></span>
+                    </td>
+                    <td><?php echo isset($a['calificacion']) ? number_format($a['calificacion'], 2) . '/20' : '-'; ?></td>
+                <?php endif; ?>
             </tr>
             <?php endforeach; ?>
         </tbody>
     </table>
     <?php endif; ?>
     
-    <!-- CONTENIDOS -->
+    <!-- CONTENIDOS - SEGÚN ROL -->
     <h2>📚 Contenidos</h2>
     <?php if (empty($contenidos)): ?>
         <p class="mensaje-vacio">No hay contenidos para mostrar en este período</p>
@@ -175,21 +203,50 @@ $usuario_nombre = $pdf_data['usuario_nombre'];
     <table>
         <thead>
             <tr>
-                <th>Contenido</th>
-                <th>Asignatura</th>
-                <th>Grado</th>
-                <th>Estudiantes</th>
-                <th>% Visto</th>
+                <?php if ($usuario_rol === 'Administrador' || $usuario_rol === 'Docente'): ?>
+                    <th>Contenido</th>
+                    <th>Asignatura</th>
+                    <th>Grado</th>
+                    <th>Sección</th>
+                    <th>Estudiantes que completaron</th>
+                    <th>% de la clase</th>
+                <?php elseif ($usuario_rol === 'Estudiante' || $usuario_rol === 'Representante'): ?>
+                    <th>Contenido</th>
+                    <th>Asignatura</th>
+                    <th>Mi Progreso</th>
+                <?php endif; ?>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($contenidos as $c): ?>
             <tr>
-                <td><?php echo htmlspecialchars($c['titulo']); ?></td>
-                <td><?php echo $c['asignatura']; ?></td>
-                <td><?php echo $c['grado']; ?></td>
-                <td><?php echo $c['estudiantes']; ?></td>
-                <td><?php echo $c['promedio_visto']; ?>%</td>
+                <?php if ($usuario_rol === 'Administrador' || $usuario_rol === 'Docente'): ?>
+                    <td><?php echo htmlspecialchars($c['titulo']); ?></td>
+                    <td><?php echo htmlspecialchars($c['asignatura']); ?></td>
+                    <td><?php echo $c['grado'] ?? '-'; ?></td>
+                    <td><?php echo $c['seccion'] ?? '-'; ?></td>
+                    <td>
+                        <?php 
+                        $completaron = $c['estudiantes_completaron'] ?? 0;
+                        $total_clase = $c['total_estudiantes_clase'] ?? 0;
+                        echo $completaron . ' / ' . $total_clase;
+                        ?>
+                    </td>
+                    <td>
+                        <?php 
+                        echo ($c['porcentaje_clase'] ?? 0) . '%';
+                        ?>
+                    </td>
+                <?php elseif ($usuario_rol === 'Estudiante' || $usuario_rol === 'Representante'): ?>
+                    <td><?php echo htmlspecialchars($c['titulo']); ?></td>
+                    <td><?php echo htmlspecialchars($c['asignatura']); ?></td>
+                    <td>
+                        <?php 
+                        $progreso = $c['progreso'] ?? $c['porcentaje_visto'] ?? 0;
+                        echo $progreso . '%';
+                        ?>
+                    </td>
+                <?php endif; ?>
             </tr>
             <?php endforeach; ?>
         </tbody>

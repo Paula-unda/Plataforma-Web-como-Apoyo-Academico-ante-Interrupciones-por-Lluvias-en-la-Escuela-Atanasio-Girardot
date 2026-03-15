@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -10,19 +11,34 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
 $usuario_id = $_SESSION['usuario_id'];
 $error = '';
 
-// Obtener grado y sección del docente
+// 🔴 PRIMERO: Obtener conexión
 try {
     $conexion = getConexion();
-    $stmt = $conexion->prepare("SELECT grado, seccion FROM docentes WHERE usuario_id = ?");
-    $stmt->execute([$usuario_id]);
-    $docente = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$docente) {
-        header('Location: gestion_actividades.php?error=Docente+sin+grado+asignado');
-        exit();
-    }
-    
-    // Obtener contenidos del docente para vincular
+} catch (Exception $e) {
+    error_log("Error de conexión: " . $e->getMessage());
+    header('Location: gestion_actividades.php?error=Error+de+conexión');
+    exit();
+}
+
+// 🔴 SEGUNDO: Obtener grado y sección del docente (AHORA $conexion YA EXISTE)
+$grado_docente = '';
+$seccion_docente = '';
+
+$stmt_docente = $conexion->prepare("SELECT grado, seccion FROM docentes WHERE usuario_id = ?");
+$stmt_docente->execute([$usuario_id]);
+$docente = $stmt_docente->fetch(PDO::FETCH_ASSOC);
+
+if ($docente) {
+    $grado_docente = $docente['grado'];
+    $seccion_docente = $docente['seccion'];
+} else {
+    $_SESSION['error'] = 'No tienes un grado y sección asignados. Contacta al administrador.';
+    header('Location: gestion_actividades.php');
+    exit();
+}
+
+// 🔴 TERCERO: Obtener contenidos del docente (AHORA $docente YA EXISTE)
+try {
     $contenidos = $conexion->prepare("
         SELECT id, titulo, asignatura FROM contenidos 
         WHERE docente_id = ? AND activo = true
@@ -30,10 +46,11 @@ try {
     ");
     $contenidos->execute([$usuario_id]);
     $lista_contenidos = $contenidos->fetchAll(PDO::FETCH_ASSOC);
-    
 } catch (Exception $e) {
-    error_log("Error: " . $e->getMessage());
+    error_log("Error al cargar contenidos: " . $e->getMessage());
+    $lista_contenidos = [];
 }
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $titulo = trim($_POST['titulo'] ?? '');
@@ -56,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $insert->execute([
                 $titulo, $descripcion, $tipo, $fecha_entrega, 
-                $usuario_id, $docente['grado'], $docente['seccion']
+                $usuario_id, $grado_docente, $seccion_docente
             ]);
             
             $actividad_id = $insert->fetchColumn();
@@ -69,6 +86,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ");
                 foreach ($contenidos_seleccionados as $cid) {
                     $link->execute([$actividad_id, $cid]);
+                }  
+            }
+            // Después de insertar la actividad
+            $actividad_id = $conexion->lastInsertId();
+
+            // Obtener estudiantes del grado/sección
+            $stmt_est = $conexion->prepare("
+                SELECT u.id FROM estudiantes e
+                JOIN usuarios u ON e.usuario_id = u.id
+                WHERE e.grado = ? AND e.seccion = ?
+            ");
+            $stmt_est->execute([$grado_docente, $seccion_docente]);  // ✅ CORRECTO
+            $estudiantes = $stmt_est->fetchAll(PDO::FETCH_COLUMN);
+
+            require_once '../includes/notificaciones_funciones.php';
+
+            foreach ($estudiantes as $estudiante_id) {
+                // 1. NOTIFICAR AL ESTUDIANTE
+                enviarNotificacion(
+                    $conexion,
+                    $estudiante_id,
+                    "📚 Nueva actividad: " . $titulo,
+                    "Tienes una nueva actividad para entregar antes del " . $fecha_entrega,
+                    'actividad',
+                    $actividad_id,
+                    'actividades'
+                );
+                
+                // 2. NOTIFICAR A SUS REPRESENTANTES
+                $stmt_rep = $conexion->prepare("
+                    SELECT representante_id FROM representantes_estudiantes WHERE estudiante_id = ?
+                ");
+                $stmt_rep->execute([$estudiante_id]);
+                $representantes = $stmt_rep->fetchAll(PDO::FETCH_COLUMN);
+                
+                foreach ($representantes as $rep_id) {
+                    enviarNotificacion(
+                        $conexion,
+                        $rep_id,
+                        "📚 Nueva actividad para tu representado",
+                        "Tu representado tiene una nueva actividad: " . $titulo,
+                        'actividad',
+                        $actividad_id,
+                        'actividades'
+                    );
                 }
             }
             
@@ -94,6 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crear Actividad - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -149,13 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left"><img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo"></div>
-        <div class="header-right">
-            <div class="icon-btn"><img src="../../../assets/icon-bell.svg" alt="Notificaciones"></div>
-            <div class="icon-btn"><img src="../../../assets/icon-user.svg" alt="Perfil"></div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
@@ -182,7 +239,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select name="tipo" class="form-control" required>
                         <option value="">Seleccionar tipo</option>
                         <option value="tarea">📝 Tarea</option>
-                        <option value="examen">📋 Examen</option>
                         <option value="indicacion">📌 Indicación</option>
                     </select>
                 </div>

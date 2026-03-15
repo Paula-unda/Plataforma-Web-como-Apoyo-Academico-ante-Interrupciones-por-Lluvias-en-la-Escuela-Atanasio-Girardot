@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 // Verificar que sea docente
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
@@ -70,6 +71,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Actividades - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -139,33 +141,19 @@ try {
         .action-btns { display: flex; gap: 8px; }
         .btn-icon { padding: 4px 8px; background: none; border: 1px solid var(--border); border-radius: 4px; text-decoration: none; color: var(--text-muted); }
         .btn-icon:hover { background: #f0f0f0; }
-        
+        /* Enlace volver */
+        .back-link {
+            display: block;
+            color: #EF5E8E;
+            text-decoration: none;
+        }
         @media (max-width: 768px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn"><img src="../../../assets/icon-bell.svg" alt="Notificaciones"></div>
-            <div class="icon-btn"><img src="../../../assets/icon-user.svg" alt="Perfil"></div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="perfil.php" class="menu-item">Mi Perfil</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
-
+    <?php require_once '../includes/header_comun.php'; ?>
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
     </div>
@@ -173,6 +161,12 @@ try {
     <div class="banner-content">
         <h1 class="banner-title">Gestión de Actividades</h1>
     </div>
+    <!-- 🔴 FLECHA DE VOLVER A LA IZQUIERDA -->
+    <?php if (basename($_SERVER['PHP_SELF']) != 'index.php'): ?>
+        <div style="max-width: 1200px; margin: 10px 0 10px 40px; padding: 0; width: 100%;">
+            <a href="index.php" class="back-link">← Volver al Panel</a>
+        </div>
+    <?php endif; ?>
 
     <main class="main-content">
         <?php if ($mensaje): ?>

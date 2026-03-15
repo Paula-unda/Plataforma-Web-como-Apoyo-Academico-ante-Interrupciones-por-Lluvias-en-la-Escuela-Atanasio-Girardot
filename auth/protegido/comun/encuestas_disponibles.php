@@ -2,6 +2,7 @@
 session_start();
 require_once '../../funciones.php';
 require_once '../includes/encuestas_funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva()) {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -66,6 +67,7 @@ $error = $_GET['error'] ?? '';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Encuestas Disponibles - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -177,36 +179,16 @@ $error = $_GET['error'] ?? '';
             padding: 0 24px; font-size: 13px; color: var(--text-muted);
             position: sticky; bottom: 0;
         }
+        /* Enlace volver */
+        .back-link {
+            display: block;
+            color: #EF5E8E;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn" onclick="window.location.href='notificaciones.php'">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn" onclick="window.location.href='perfil.php'">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="<?php 
-                    if ($usuario_rol === 'Administrador') echo '../admin/index.php';
-                    elseif ($usuario_rol === 'Docente') echo '../docente/index.php';
-                    elseif ($usuario_rol === 'Estudiante') echo '../estudiante/index.php';
-                    elseif ($usuario_rol === 'Representante') echo '../representante/index.php';
-                ?>" class="menu-item">Panel Principal</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
@@ -214,6 +196,35 @@ $error = $_GET['error'] ?? '';
 
     <div class="banner-content">
         <h1 class="banner-title">📋 Encuestas Disponibles</h1>
+    </div>
+    <!-- 🔴 FLECHA DE VOLVER SEGÚN EL ROL -->
+    <?php
+    // Determinar la página de inicio según el rol
+    $pagina_inicio = '';
+    switch ($usuario_rol) {
+        case 'Administrador':
+            $pagina_inicio = '../admin/index.php';
+            break;
+        case 'Docente':
+            $pagina_inicio = '../docente/index.php';
+            break;
+        case 'Estudiante':
+            $pagina_inicio = '../estudiante/index.php';
+            break;
+        case 'Representante':
+            $pagina_inicio = '../representante/index.php';
+            break;
+        default:
+            $pagina_inicio = '../../index.php';
+    }
+    ?>
+    <div style="max-width: 1400px; margin: 15px 0 15px 40px; padding: 0; width: 100%; text-align: left;">
+        <a href="<?php echo $pagina_inicio; ?>" 
+        style="display: inline-block; color: #EF5E8E; text-decoration: none; font-weight: 500; font-size: 14px; transition: transform 0.2s;"
+        onmouseover="this.style.transform='translateX(-4px)'" 
+        onmouseout="this.style.transform='translateX(0)'">
+            ← Volver al Panel Principal
+        </a>
     </div>
 
     <main class="main-content">

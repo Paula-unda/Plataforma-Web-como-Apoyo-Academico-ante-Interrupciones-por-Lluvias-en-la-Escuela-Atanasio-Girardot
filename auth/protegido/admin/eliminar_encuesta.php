@@ -20,7 +20,7 @@ try {
     $tiene_respuestas = $stmt_check->fetchColumn();
     
     if ($tiene_respuestas > 0) {
-        $_SESSION['error'] = "❌ No se puede eliminar: la encuesta ya tiene respuestas registradas";
+        $_SESSION['error'] = " No se puede eliminar: la encuesta ya tiene respuestas registradas";
         header('Location: encuestas.php');
         exit();
     }

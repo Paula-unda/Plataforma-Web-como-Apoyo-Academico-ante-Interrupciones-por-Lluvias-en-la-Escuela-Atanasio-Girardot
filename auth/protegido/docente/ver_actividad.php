@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -124,6 +125,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ver Actividad - <?php echo htmlspecialchars($datos_actividad['titulo']); ?></title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -473,7 +475,49 @@ try {
         .archivo-link:hover {
             text-decoration: underline;
         }
-        
+        /* Estilo para el botón de comentario */
+        .btn-comentario {
+            background-color: var(--primary-cyan);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .btn-comentario:hover {
+            background-color: var(--primary-purple);
+            transform: scale(1.05);
+        }
+
+        .btn-comentario.activo {
+            background-color: var(--primary-pink);
+        }
+
+        /* Contenedor del comentario desplegado */
+        .comentario-desplegado {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary-cyan);
+            padding: 12px;
+            margin-top: 8px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: none;
+            max-width: 300px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .comentario-desplegado.mostrar {
+            display: block;
+        }
         @media (max-width: 768px) {
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -482,29 +526,7 @@ try {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="gestion_actividades.php" class="menu-item">Gestión de Actividades</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
@@ -597,6 +619,7 @@ try {
                                 <th>Estudiante</th>
                                 <th>Estado</th>
                                 <th>Archivo</th>
+                                <th>Comentario</th>
                                 <th>Fecha entrega</th>
                                 <th>Calificación</th>
                                 <th>Acciones</th>
@@ -615,14 +638,32 @@ try {
                                     </td>
                                     <td>
                                         <?php if (!empty($est['archivo_entregado'])): ?>
-                                            <a href="../../uploads/entregas/<?php echo $est['archivo_entregado']; ?>" 
-                                               class="archivo-link" target="_blank">
+                                            <a href="../../../uploads/entregas/<?php echo $est['archivo_entregado']; ?>" 
+                                                class="archivo-link" target="_blank">
                                                 📄 Ver archivo
                                             </a>
                                         <?php else: ?>
                                             <span style="color: var(--text-muted);">—</span>
                                         <?php endif; ?>
                                     </td>
+                                    <td>
+                                        <?php if (!empty($est['comentario'])): ?>
+                                            <div style="position: relative;">
+                                                <!-- Botón para desplegar - AHORA PASA EL EVENTO -->
+                                                <button class="btn-comentario" onclick="toggleComentario(<?php echo $est['estudiante_id']; ?>)">
+                                                    💬 Ver comentario
+                                                </button>
+                                                
+                                                <!-- Contenedor oculto del comentario -->
+                                                <div id="comentario-<?php echo $est['estudiante_id']; ?>" class="comentario-desplegado">
+                                                    <?php echo nl2br(htmlspecialchars($est['comentario'])); ?>
+                                                </div>
+                                            </div>
+                                        <?php else: ?>
+                                            <span style="color: var(--text-muted); font-style: italic;">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                
                                     <td>
                                         <?php 
                                         if ($est['fecha_entrega']) {
@@ -644,7 +685,22 @@ try {
                                             <button class="btn-primary" onclick="mostrarCalificar(<?php echo $est['estudiante_id']; ?>)">
                                                 Calificar
                                             </button>
-                                            
+                                            <?php 
+                                                // Determinar si se puede reabrir (entregado, atrasado, o calificado con nota baja)
+                                                $puede_reabrir = ($est['estado_actual'] === 'enviado' || 
+                                                                $est['estado_actual'] === 'atrasado' || 
+                                                                ($est['estado_actual'] === 'calificado' && $est['calificacion'] < 10));
+                                                
+                                                if ($puede_reabrir): 
+                                                ?>
+                                                    <a href="reabrir_entrega.php?entrega_id=<?php echo $est['id']; ?>&actividad_id=<?php echo $actividad_id; ?>" 
+                                                    class="btn-secondary" 
+                                                    style="background-color: #ffc107; color: #333; border-color: #ffc107;"
+                                                    onclick="return confirm('¿Estás seguro de que quieres reabrir esta entrega? El estudiante podrá modificarla de nuevo.')">
+                                                        🔓 Reabrir
+                                                    </a>
+                                                <?php endif; ?>
+                                                
                                             <div id="calificar-<?php echo $est['estudiante_id']; ?>" style="display: none;" class="calificar-form">
                                                 <form method="POST">
                                                     <input type="hidden" name="estudiante_id" value="<?php echo $est['estudiante_id']; ?>">
@@ -714,6 +770,23 @@ try {
 
         function ocultarCalificar(estudianteId) {
             document.getElementById('calificar-' + estudianteId).style.display = 'none';
+        }
+        // Función para mostrar/ocultar comentarios
+        function toggleComentario(estudianteId) {
+            var comentarioDiv = document.getElementById('comentario-' + estudianteId);
+            var boton = event.currentTarget; // Usar event.currentTarget en lugar de querySelector
+            
+            if (!comentarioDiv || !boton) return;
+            
+            comentarioDiv.classList.toggle('mostrar');
+            
+            if (comentarioDiv.classList.contains('mostrar')) {
+                boton.innerHTML = '📕 Ocultar comentario';
+                boton.classList.add('activo');
+            } else {
+                boton.innerHTML = '💬 Ver comentario';
+                boton.classList.remove('activo');
+            }
         }
     </script>
 </body>

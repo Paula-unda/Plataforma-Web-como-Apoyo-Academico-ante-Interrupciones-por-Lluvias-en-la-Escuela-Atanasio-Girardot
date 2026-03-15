@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Representante') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -18,7 +19,6 @@ try {
     $check = $conexion->query("SELECT 1 FROM notificaciones LIMIT 1");
     $tabla_notificaciones_existe = true;
 } catch (Exception $e) {
-    // La tabla no existe, ignorar
     $tabla_notificaciones_existe = false;
 }
 
@@ -160,9 +160,10 @@ foreach ($hijos as $h) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Panel de Representante - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -192,18 +193,24 @@ foreach ($hijos as $h) {
             flex-direction: column;
         }
 
-        /* Encabezado */
+        /* Header responsive */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 24px;
+            padding: 0 16px;
             height: 60px;
             background-color: var(--surface);
             border-bottom: 1px solid var(--border);
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             position: relative;
             z-index: 100;
+        }
+
+        @media (min-width: 768px) {
+            .header {
+                padding: 0 24px;
+            }
         }
 
         .header-left {
@@ -213,13 +220,19 @@ foreach ($hijos as $h) {
         }
 
         .logo {
-            height: 40px;
+            height: 32px;
+        }
+
+        @media (min-width: 768px) {
+            .logo {
+                height: 40px;
+            }
         }
 
         .header-right {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
         }
 
         .icon-btn {
@@ -232,6 +245,7 @@ foreach ($hijos as $h) {
             justify-content: center;
             cursor: pointer;
             transition: background 0.2s;
+            flex-shrink: 0;
         }
 
         .icon-btn:hover {
@@ -247,17 +261,24 @@ foreach ($hijos as $h) {
         .menu-dropdown {
             position: absolute;
             top: 60px;
-            right: 24px;
+            right: 16px;
             background: white;
             border: 1px solid var(--border);
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             display: none;
             min-width: 180px;
+            z-index: 1000;
+        }
+
+        @media (min-width: 768px) {
+            .menu-dropdown {
+                right: 24px;
+            }
         }
 
         .menu-item {
-            padding: 10px 16px;
+            padding: 12px 16px;
             font-size: 14px;
             color: var(--text-dark);
             text-decoration: none;
@@ -269,18 +290,24 @@ foreach ($hijos as $h) {
             background-color: #F8F8F8;
         }
 
-        /* Banner */
+        /* Banner responsive */
         .banner {
             position: relative;
-            height: 100px; 
+            height: 80px;
             overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .banner {
+                height: 100px;
+            }
         }
 
         .banner-image {
             width: 100%;
             height: 100%;
-            object-fit: cover; 
-            object-position: top; 
+            object-fit: cover;
+            object-position: top;
         }
 
         .banner-content {
@@ -288,43 +315,63 @@ foreach ($hijos as $h) {
             position: relative;
             z-index: 2;
             max-width: 800px;
-            padding: 20px;
+            padding: 16px;
             margin: 0 auto;
         }
 
         .banner-title {
-            font-size: 36px;
+            font-size: 28px;
             font-weight: 700;
             color: var(--text-dark);
             margin-bottom: 8px;
         }
 
+        @media (min-width: 768px) {
+            .banner-title {
+                font-size: 36px;
+            }
+        }
+
         .banner-subtitle {
-            font-size: 18px;
+            font-size: 16px;
             color: var(--text-muted);
         }
 
         /* Contenido principal */
         .main-content {
             flex: 1;
-            padding: 40px 20px;
+            padding: 20px 16px;
             max-width: 1400px;
             margin: 0 auto;
             width: 100%;
         }
 
-        /* Selector de hijos */
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 40px 20px;
+            }
+        }
+
+        /* Selector de hijos responsive */
         .selector-hijos {
             background: white;
             border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 30px;
+            padding: 16px;
+            margin-bottom: 24px;
             box-shadow: 0 6px 16px rgba(0,0,0,0.1);
             border: 1px solid var(--border);
             display: flex;
-            align-items: center;
-            gap: 20px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        @media (min-width: 768px) {
+            .selector-hijos {
+                flex-direction: row;
+                align-items: center;
+                gap: 20px;
+                padding: 20px;
+            }
         }
 
         .selector-label {
@@ -349,6 +396,7 @@ foreach ($hijos as $h) {
             font-weight: 500;
             transition: all 0.3s;
             border: 2px solid transparent;
+            font-size: 14px;
         }
 
         .hijo-tab:hover {
@@ -370,68 +418,101 @@ foreach ($hijos as $h) {
             margin-left: 8px;
         }
 
-        /* Stats grid */
+        /* Stats grid - IGUAL QUE EN REPORTES */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
             margin-bottom: 30px;
         }
 
+        @media (min-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 20px;
+            }
+        }
+
         .stat-card {
-            background: white;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            text-align: center;
             border-left: 4px solid var(--primary-cyan);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
 
         .stat-number {
-            font-size: 32px;
+            font-size: 24px;
             font-weight: 700;
             color: var(--primary-cyan);
             margin-bottom: 5px;
         }
 
+        @media (min-width: 768px) {
+            .stat-number {
+                font-size: 32px;
+            }
+        }
+
         .stat-label {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
         .stat-small {
-            font-size: 12px;
+            font-size: 11px;
             color: #999;
             margin-top: 5px;
         }
 
-        /* Tarjetas de contenido */
+        /* Grid de contenido */
         .content-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
             margin-bottom: 30px;
+        }
+
+        @media (min-width: 1024px) {
+            .content-grid {
+                grid-template-columns: 2fr 1fr;
+            }
         }
 
         .card {
             background: white;
             border-radius: 16px;
-            padding: 24px;
+            padding: 20px;
             box-shadow: 0 6px 16px rgba(0,0,0,0.1);
             border: 1px solid var(--border);
         }
 
         .card-header {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 10px;
             margin-bottom: 20px;
             padding-bottom: 10px;
             border-bottom: 2px solid var(--primary-cyan);
         }
 
+        @media (min-width: 768px) {
+            .card-header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+        }
+
         .card-header h2 {
             color: var(--primary-purple);
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
         }
 
@@ -441,9 +522,15 @@ foreach ($hijos as $h) {
             font-size: 14px;
         }
 
-        /* Tablas */
+        /* Tablas responsive */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         table {
             width: 100%;
+            min-width: 500px;
             border-collapse: collapse;
         }
 
@@ -452,26 +539,27 @@ foreach ($hijos as $h) {
             padding: 12px 8px;
             color: var(--text-muted);
             font-weight: 600;
-            font-size: 14px;
+            font-size: 13px;
         }
 
         td {
             padding: 12px 8px;
             border-bottom: 1px solid var(--border);
+            font-size: 13px;
         }
 
         .badge {
             padding: 4px 8px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
+            white-space: nowrap;
         }
 
         .badge-pendiente { background: #fff3cd; color: #856404; }
         .badge-enviado { background: #d4edda; color: #155724; }
         .badge-calificado { background: #cce5ff; color: #004085; }
         .badge-info { background: var(--primary-cyan); color: white; }
-        .badge-warning { background: var(--primary-pink); color: white; }
 
         /* Notificaciones */
         .notificacion-item {
@@ -487,10 +575,11 @@ foreach ($hijos as $h) {
         .notificacion-titulo {
             font-weight: 600;
             margin-bottom: 4px;
+            font-size: 14px;
         }
 
         .notificacion-fecha {
-            font-size: 12px;
+            font-size: 11px;
             color: #999;
         }
 
@@ -500,11 +589,22 @@ foreach ($hijos as $h) {
         }
 
         /* Encuestas */
+        .encuestas-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        @media (min-width: 768px) {
+            .encuestas-grid {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+        }
+
         .encuesta-item {
             padding: 15px;
             border: 1px solid var(--border);
             border-radius: 8px;
-            margin-bottom: 10px;
             transition: transform 0.2s;
         }
 
@@ -524,22 +624,83 @@ foreach ($hijos as $h) {
             margin-top: 10px;
             text-decoration: none;
             display: inline-block;
+            font-size: 13px;
         }
 
-        .btn-responder:hover {
+        /* ===== NUEVAS TARJETAS DE NAVEGACIÓN (ESTILO INDEX) ===== */
+        .cards-navegacion {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .nav-card {
+            background: linear-gradient(135deg, var(--primary-cyan), var(--primary-purple));
+            border-radius: 16px;
+            padding: 24px 20px;
+            text-align: center;
+            color: white;
+            text-decoration: none;
+            display: block;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            min-width: 200px;
+            max-width: 220px;
+            flex: 1;
+        }
+
+        .nav-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+        }
+
+        .nav-card-1 { background: linear-gradient(135deg, var(--primary-cyan), var(--primary-purple)); }
+        .nav-card-2 { background: linear-gradient(135deg, var(--primary-pink), #f89ca6); }
+        .nav-card-3 { background: linear-gradient(135deg, var(--primary-lime), #d7e07a); }
+        .nav-card-4 { background: linear-gradient(135deg, var(--primary-purple), #b09cff); }
+
+        .nav-card-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-card-icon svg,
+        .nav-card-icon img {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+        }
+
+        .nav-card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: white;
+        }
+
+        .nav-card-desc {
+            font-size: 13px;
             opacity: 0.9;
+            color: white;
         }
 
-        /* Mensaje sin hijos */
+        /* Mensajes */
         .no-hijos {
             text-align: center;
-            padding: 60px;
+            padding: 40px 20px;
             background: white;
             border-radius: 16px;
         }
 
         .no-hijos-icon {
-            font-size: 80px;
+            font-size: 60px;
             margin-bottom: 20px;
         }
 
@@ -548,10 +709,9 @@ foreach ($hijos as $h) {
             margin-bottom: 10px;
         }
 
-        /* Mensaje de tabla no existente */
         .tabla-no-existe {
             text-align: center;
-            padding: 30px;
+            padding: 20px;
             color: #999;
             font-style: italic;
         }
@@ -564,55 +724,30 @@ foreach ($hijos as $h) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 24px;
-            font-size: 13px;
+            padding: 0 16px;
+            font-size: 12px;
             color: var(--text-muted);
             position: sticky;
             bottom: 0;
         }
 
-        @media (max-width: 768px) {
-            .content-grid {
-                grid-template-columns: 1fr;
-            }
-            .banner-title {
-                font-size: 28px;
+        @media (min-width: 768px) {
+            .footer {
+                padding: 0 24px;
+                font-size: 13px;
             }
         }
     </style>
 </head>
 <body>
+    <div style="height: 60px; width: 100%; background: transparent;"></div>
 
     <!-- Header -->
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn" onclick="window.location.href='../comun/notificaciones.php'">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-                <?php if ($tabla_notificaciones_existe && $total_notificaciones_no_leidas > 0): ?>
-                    <span style="position: relative; top: -10px; right: 5px; background: var(--primary-pink); color: white; border-radius: 50%; padding: 2px 6px; font-size: 10px;"><?php echo $total_notificaciones_no_leidas; ?></span>
-                <?php endif; ?>
-            </div>
-            <div class="icon-btn" onclick="window.location.href='perfil.php'">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="perfil.php" class="menu-item">Mi Perfil</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <!-- Banner -->
     <div class="banner">
-        <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
+        <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image" onerror="this.style.display='none'">
     </div>
 
     <!-- Título -->
@@ -681,41 +816,42 @@ foreach ($hijos as $h) {
             <div class="card">
                 <div class="card-header">
                     <h2>📝 Actividades Recientes de <?php echo htmlspecialchars($hijo_actual['nombre']); ?></h2>
-                    <a href="../comun/historial.php?estudiante_id=<?php echo $hijo_seleccionado_id; ?>">Ver todas →</a>
                 </div>
                 
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Actividad</th>
-                            <th>Tipo</th>
-                            <th>Estado</th>
-                            <th>Calificación</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($actividades_recientes)): ?>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
                             <tr>
-                                <td colspan="4" style="text-align: center; padding: 20px; color: #999;">
-                                    No hay actividades recientes
-                                </td>
+                                <th>Actividad</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Calificación</th>
                             </tr>
-                        <?php else: ?>
-                            <?php foreach ($actividades_recientes as $act): ?>
-                            <tr>
-                                <td><?php echo htmlspecialchars($act['titulo']); ?></td>
-                                <td><span class="badge badge-info"><?php echo $act['tipo']; ?></span></td>
-                                <td>
-                                    <span class="badge badge-<?php echo $act['estado']; ?>">
-                                        <?php echo $act['estado']; ?>
-                                    </span>
-                                </td>
-                                <td><?php echo $act['calificacion'] ?: '-'; ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($actividades_recientes)): ?>
+                                <tr>
+                                    <td colspan="4" style="text-align: center; padding: 20px; color: #999;">
+                                        No hay actividades recientes
+                                    </td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($actividades_recientes as $act): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($act['titulo']); ?></td>
+                                    <td><span class="badge badge-info"><?php echo $act['tipo']; ?></span></td>
+                                    <td>
+                                        <span class="badge badge-<?php echo $act['estado']; ?>">
+                                            <?php echo $act['estado']; ?>
+                                        </span>
+                                    </td>
+                                    <td><?php echo $act['calificacion'] ?: '-'; ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Columna derecha: Notificaciones -->
@@ -758,16 +894,16 @@ foreach ($hijos as $h) {
                     No hay encuestas pendientes
                 </div>
             <?php else: ?>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                <div class="encuestas-grid">
                     <?php foreach ($encuestas_pendientes as $enc): ?>
                     <div class="encuesta-item">
-                        <h3 style="margin-bottom: 5px;"><?php echo htmlspecialchars($enc['titulo']); ?></h3>
-                        <p style="color: #666; font-size: 14px; margin-bottom: 10px;"><?php echo htmlspecialchars($enc['descripcion']); ?></p>
+                        <h3 style="margin-bottom: 5px; font-size: 16px;"><?php echo htmlspecialchars($enc['titulo']); ?></h3>
+                        <p style="color: #666; font-size: 13px; margin-bottom: 10px;"><?php echo htmlspecialchars($enc['descripcion']); ?></p>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 12px; color: #999;">
+                            <span style="font-size: 11px; color: #999;">
                                 Vence: <?php echo date('d/m/Y', strtotime($enc['fecha_cierre'])); ?>
                             </span>
-                            <a href="../comun/ver_encuesta.php?id=<?php echo $enc['id']; ?>&estudiante_id=<?php echo $hijo_seleccionado_id; ?>" class="btn-responder">
+                            <a href="../comun/responder_encuesta.php?id=<?php echo $enc['id']; ?>" class="btn-responder">
                                 Responder
                             </a>
                         </div>
@@ -777,31 +913,32 @@ foreach ($hijos as $h) {
             <?php endif; ?>
         </div>
 
-        <!-- Tarjetas de navegación rápida -->
-        <div style="display: flex; gap: 15px; justify-content: center; margin-top: 30px; flex-wrap: wrap;">
-            <!-- Historial completo -->
-            <a href="../comun/historial.php?estudiante_id=<?php echo $hijo_seleccionado_id; ?>" style="text-decoration: none;">
-                <div style="background: linear-gradient(135deg, var(--primary-cyan), var(--primary-purple)); padding: 20px; border-radius: 12px; width: 200px; text-align: center; color: white;">
-                    <div style="font-size: 40px; margin-bottom: 10px;">📚</div>
-                    <h3 style="font-size: 16px;">Historial Completo</h3>
+        <!-- TARJETAS DE NAVEGACIÓN RÁPIDA (CORREGIDAS) -->
+        <div class="cards-navegacion">
+            <!-- Tarjeta 1: Historial Completo (REPORTES) -->
+            <a href="../comun/reportes.php?estudiante_id=<?php echo $hijo_seleccionado_id; ?>" class="nav-card nav-card-1">
+                <div class="nav-card-icon">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                        <path d="M4 6h16v2H4V6zm2-4h12v2H6V2zm16 8H2v12h20V10zm-2 10H4v-8h16v8z"/>
+                    </svg>
                 </div>
+                <h3 class="nav-card-title">Historial Completo</h3>
+                <p class="nav-card-desc">Ver actividades, calificaciones y progreso</p>
             </a>
             
-            <!-- Ver calificaciones -->
-            <a href="../estudiante/calificaciones.php?estudiante_id=<?php echo $hijo_seleccionado_id; ?>" style="text-decoration: none;">
-                <div style="background: linear-gradient(135deg, var(--primary-pink), #f89ca6); padding: 20px; border-radius: 12px; width: 200px; text-align: center; color: white;">
-                    <div style="font-size: 40px; margin-bottom: 10px;">📊</div>
-                    <h3 style="font-size: 16px;">Calificaciones</h3>
+            
+            <!-- Tarjeta 3: Encuestas -->
+            <a href="../comun/encuestas_disponibles.php" class="nav-card nav-card-3">
+                <div class="nav-card-icon">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                        <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5v18h14V3zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4 12H8v-2h8v2zm0-4H8V9h8v2z"/>
+                    </svg>
                 </div>
+                <h3 class="nav-card-title">Encuestas</h3>
+                <p class="nav-card-desc">Responder encuestas pendientes</p>
             </a>
             
-            <!-- Foro -->
-            <a href="../comun/foro.php?estudiante_id=<?php echo $hijo_seleccionado_id; ?>" style="text-decoration: none;">
-                <div style="background: linear-gradient(135deg, var(--primary-lime), #d7e07a); padding: 20px; border-radius: 12px; width: 200px; text-align: center; color: #333;">
-                    <div style="font-size: 40px; margin-bottom: 10px;">💬</div>
-                    <h3 style="font-size: 16px;">Participación en Foros</h3>
-                </div>
-            </a>
+            
         </div>
         <?php endif; ?>
         <?php endif; ?>

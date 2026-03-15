@@ -264,7 +264,7 @@ function actualizarProgresoContenido($estudiante_id, $contenido_id, $porcentaje)
 
 /**
  * Obtiene todos los contenidos con su progreso para un estudiante
- * VERSIÓN CORREGIDA - SIN DUPLICADOS
+ * ORDENADOS POR FECHA MÁS RECIENTE PRIMERO (VERSIÓN CORREGIDA)
  */
 function obtenerContenidosConProgreso($estudiante_id) {
     $conexion = getConexion();
@@ -278,8 +278,6 @@ function obtenerContenidosConProgreso($estudiante_id) {
         $grado = trim($estudiante['grado'] ?? '');
         $seccion = trim($estudiante['seccion'] ?? '');
         
-        // ✅ IMPORTANTE: Usar DISTINCT para evitar duplicados
-        // ✅ O usar subconsulta para el progreso
         $query = "
             SELECT DISTINCT
                 c.id,
@@ -293,13 +291,14 @@ function obtenerContenidosConProgreso($estudiante_id) {
                 c.seccion,
                 u.nombre as docente_nombre,
                 COALESCE(p.porcentaje_visto, 0) as porcentaje_visto,
-                COALESCE(p.completado, false) as completado
+                COALESCE(p.completado, false) as completado,
+                p.ultima_visualizacion
             FROM contenidos c
             LEFT JOIN usuarios u ON c.docente_id = u.id
             LEFT JOIN (
-                SELECT DISTINCT contenido_id, estudiante_id, porcentaje_visto, completado
+                SELECT DISTINCT contenido_id, estudiante_id, porcentaje_visto, completado, ultima_visualizacion
                 FROM progreso_contenido
-                WHERE estudiante_id = :estudiante_id
+                WHERE estudiante_id = :estudiante_id AND material_id IS NULL
             ) p ON p.contenido_id = c.id
             WHERE c.activo = true 
                 AND (
@@ -309,7 +308,6 @@ function obtenerContenidosConProgreso($estudiante_id) {
                     OR 
                     (TRIM(c.grado) = :grado AND TRIM(c.seccion) = :seccion)
                 )
-            ORDER BY c.fecha_publicacion DESC
         ";
         
         $stmt = $conexion->prepare($query);
@@ -319,7 +317,30 @@ function obtenerContenidosConProgreso($estudiante_id) {
             'seccion' => $seccion
         ]);
         
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 🔴 ORDENAMIENTO MULTINIVEL: primero por fecha, luego por ID
+        usort($resultados, function($a, $b) {
+            // Convertir fechas a timestamp para comparar
+            $fecha_a = strtotime($a['fecha_publicacion'] ?? '1970-01-01');
+            $fecha_b = strtotime($b['fecha_publicacion'] ?? '1970-01-01');
+            
+            // Si las fechas son iguales, ordenar por ID descendente (más nuevo primero)
+            if ($fecha_a == $fecha_b) {
+                return $b['id'] - $a['id']; // Mayor ID primero (asumiendo que IDs más grandes son más recientes)
+            }
+            
+            // Ordenar por fecha descendente (más reciente primero)
+            return $fecha_b - $fecha_a;
+        });
+        
+        // 📊 LOG PARA VERIFICAR EL ORDEN
+        error_log("=== CONTENIDOS ORDENADOS CORRECTAMENTE ===");
+        foreach ($resultados as $i => $r) {
+            error_log(($i+1) . ". ID: " . $r['id'] . " | Fecha: " . $r['fecha_publicacion'] . " | Título: " . $r['titulo']);
+        }
+        
+        return $resultados;
         
     } catch (PDOException $e) {
         error_log("Error al obtener contenidos con progreso: " . $e->getMessage());
@@ -333,6 +354,63 @@ function obtenerActividadesEstudiante($estudiante_id) {
     $conexion = getConexion();
     
     try {
+        // Obtener grado y sección del estudiante
+        $query_est = "SELECT grado, seccion FROM estudiantes WHERE usuario_id = ?";
+        $stmt_est = $conexion->prepare($query_est);
+        $stmt_est->execute([$estudiante_id]);
+        $estudiante = $stmt_est->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$estudiante) {
+            error_log("❌ Estudiante no encontrado: " . $estudiante_id);
+            return array();
+        }
+        
+        $grado = $estudiante['grado'];
+        $seccion = $estudiante['seccion'];
+        
+        error_log("✅ Estudiante ID: $estudiante_id - Grado: $grado - Sección: $seccion");
+        
+        // 🔍 DEPURACIÓN 1: Ver TODAS las actividades del docente
+        error_log("🔍 DEPURACIÓN: Buscando actividades del docente...");
+        $query_docente = "
+            SELECT id, titulo, grado, seccion, docente_id, activo
+            FROM actividades 
+            WHERE docente_id = (SELECT id FROM usuarios WHERE rol = 'Docente' LIMIT 1)
+            ORDER BY id DESC
+        ";
+        // Nota: Ajusta esta consulta según tu lógica real de docente
+        
+        // 🔍 DEPURACIÓN 2: Ver actividades de ESTE grado/sección
+        $query_mismo_grado = "
+            SELECT id, titulo, grado, seccion, activo
+            FROM actividades 
+            WHERE grado = ? AND seccion = ? AND activo = true
+        ";
+        $stmt_mismo = $conexion->prepare($query_mismo_grado);
+        $stmt_mismo->execute([$grado, $seccion]);
+        $act_mismo_grado = $stmt_mismo->fetchAll(PDO::FETCH_ASSOC);
+        error_log("📊 Actividades del grado $grado-$seccion: " . count($act_mismo_grado));
+        foreach ($act_mismo_grado as $act) {
+            error_log("   - ID: {$act['id']} | '{$act['titulo']}' | Grado: {$act['grado']}-{$act['seccion']}");
+        }
+        
+        // 🔍 DEPURACIÓN 3: Ver TODAS las actividades activas
+        $query_todas = "
+            SELECT id, titulo, grado, seccion, activo
+            FROM actividades 
+            WHERE activo = true
+            ORDER BY id DESC
+            LIMIT 20
+        ";
+        $stmt_todas = $conexion->prepare($query_todas);
+        $stmt_todas->execute();
+        $todas_actividades = $stmt_todas->fetchAll(PDO::FETCH_ASSOC);
+        error_log("📊 TOTAL actividades activas en BD: " . count($todas_actividades));
+        foreach ($todas_actividades as $act) {
+            error_log("   - ID: {$act['id']} | '{$act['titulo']}' | Grado: {$act['grado']}-{$act['seccion']}");
+        }
+        
+        // 🔴 CONSULTA ORIGINAL (la que estás usando)
         $query = "
             SELECT 
                 a.id, a.titulo, a.descripcion, a.tipo, a.fecha_entrega,
@@ -340,14 +418,19 @@ function obtenerActividadesEstudiante($estudiante_id) {
                 'pendiente' as estado_final
             FROM actividades a
             LEFT JOIN usuarios u ON a.docente_id = u.id
-            WHERE a.activo = true
+            WHERE a.activo = true 
+                AND a.grado = ? 
+                AND a.seccion = ?
             ORDER BY a.fecha_entrega ASC
         ";
         
         $stmt = $conexion->prepare($query);
-        $stmt->execute();
+        $stmt->execute([$grado, $seccion]);
         $actividades = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
+        error_log("📊 Actividades encontradas con filtro original: " . count($actividades));
+        
+        // 🔴 AGREGAR INFORMACIÓN DE ENTREGAS
         foreach ($actividades as &$actividad) {
             $act_id = $actividad['id'];
             $entrega = obtenerEntregaEstudiante($act_id, $estudiante_id);
@@ -369,6 +452,9 @@ function obtenerActividadesEstudiante($estudiante_id) {
                     $actividad['estado_final'] = $entrega['estado'] ?? 'pendiente';
                 }
             } else {
+                if (!empty($actividad['fecha_entrega']) && strtotime($actividad['fecha_entrega']) < time()) {
+                    $actividad['estado_final'] = 'atrasado';
+                }
                 $actividad['calificacion'] = null;
                 $actividad['estado_entrega'] = null;
             }
@@ -381,9 +467,8 @@ function obtenerActividadesEstudiante($estudiante_id) {
         return array();
     }
 }
-
 /**
- * Obtiene los contenidos vinculados a una actividad
+ * Obtiene los contenidos vinculados a una actividad (VERSIÓN CORREGIDA)
  */
 function obtenerContenidosDeActividad($actividad_id) {
     $conexion = getConexion();
@@ -393,18 +478,18 @@ function obtenerContenidosDeActividad($actividad_id) {
             SELECT c.*
             FROM actividades_contenidos ac
             INNER JOIN contenidos c ON ac.contenido_id = c.id
-            WHERE ac.actividad_id = $1 AND c.activo = true
-            ORDER BY c.fecha_publicacion DESC
+            WHERE ac.actividad_id = :id
         ";
+        
         $stmt = $conexion->prepare($query);
-        $stmt->execute([$actividad_id]);
-        return $stmt->fetchAll();
+        $stmt->execute(['id' => $actividad_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
     } catch (PDOException $e) {
-        error_log("Error al obtener contenidos de actividad: " . $e->getMessage());
+        error_log("Error en obtenerContenidosDeActividad: " . $e->getMessage());
         return array();
     }
 }
-
 /**
  * Registra una entrega de estudiante
  */
@@ -553,80 +638,153 @@ function obtenerEntregaEstudiante($actividad_id, $estudiante_id) {
 }
 
 /**
- * Obtiene la actividad vinculada a un contenido
+ * Obtiene la actividad vinculada a un contenido (VERSIÓN CORREGIDA)
  */
 function obtenerActividadPorContenido($contenido_id, $estudiante_id = null) {
     $conexion = getConexion();
     
     try {
-        // ✅ DEBUG - Parámetros de entrada
         error_log("=== obtenerActividadPorContenido ===");
-        error_log("Contenido ID recibido: " . $contenido_id);
-        error_log("Estudiante ID recibido: " . ($estudiante_id ?? 'NULL'));
+        error_log("Contenido ID: " . $contenido_id);
         
-        // ✅ QUERY - Verificar relación primero
-        $check_query = "SELECT * FROM actividades_contenidos WHERE contenido_id = $1";
-        $check_stmt = $conexion->prepare($check_query);
-        $check_stmt->execute([$contenido_id]);
-        $check_result = $check_stmt->fetch(PDO::FETCH_ASSOC);
+        // 1. VERIFICAR SI HAY RELACIÓN
+        $check = $conexion->prepare("
+            SELECT actividad_id FROM actividades_contenidos 
+            WHERE contenido_id = ?
+        ");
+        $check->execute([$contenido_id]);
+        $relacion = $check->fetch(PDO::FETCH_ASSOC);
         
-        error_log("Relación en actividades_contenidos: " . ($check_result ? 'EXISTS' : 'NOT EXISTS'));
-        if ($check_result) {
-            error_log("actividad_id encontrado: " . ($check_result['actividad_id'] ?? 'NULL'));
+        if (!$relacion) {
+            error_log("❌ No hay relación en actividades_contenidos");
+            return null;
         }
         
-        // ✅ QUERY PRINCIPAL
-        $query = "
-            SELECT 
-                a.id,
-                a.titulo,
-                a.descripcion,
-                a.tipo,
-                a.fecha_entrega,
-                a.grado,
-                a.seccion,
-                a.activo,
-                e.estado as estado_entrega,
-                e.calificacion
-            FROM actividades a
-            INNER JOIN actividades_contenidos ac ON a.id = ac.actividad_id
-            LEFT JOIN entregas_estudiantes e ON e.actividad_id = a.id AND e.estudiante_id = $1
-            WHERE ac.contenido_id = $2 
-              AND a.activo = true
-            LIMIT 1
-        ";
+        $actividad_id = $relacion['actividad_id'];
+        error_log("✅ Relación encontrada - Actividad ID: " . $actividad_id);
         
-        error_log("Ejecutando query con estudiante_id=" . ($estudiante_id ?? 'NULL') . ", contenido_id=" . $contenido_id);
-        
+        // 2. OBTENER LA ACTIVIDAD
+        $query = "SELECT * FROM actividades WHERE id = ? AND activo = true";
         $stmt = $conexion->prepare($query);
-        $stmt->execute([$estudiante_id, $contenido_id]);
+        $stmt->execute([$actividad_id]);
+        $actividad = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        $resultado = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        // ✅ DEBUG - Resultado
-        error_log("Resultado de query: " . ($resultado ? 'ENCONTRADO' : 'NO ENCONTRADO'));
-        if ($resultado) {
-            error_log("Actividad ID: " . ($resultado['id'] ?? 'SIN ID'));
-            error_log("Actividad Titulo: " . ($resultado['titulo'] ?? 'SIN TITULO'));
-            error_log("Actividad Activo: " . ($resultado['activo'] ?? 'SIN ESTADO'));
+        if ($actividad) {
+            error_log("✅ Actividad ENCONTRADA - Título: " . $actividad['titulo']);
+            return $actividad;
         } else {
-            // ✅ DEBUG ADICIONAL - Verificar si la actividad existe pero está inactiva
-            $check_activo = "SELECT id, titulo, activo FROM actividades WHERE id IN (SELECT actividad_id FROM actividades_contenidos WHERE contenido_id = $1)";
-            $check_activo_stmt = $conexion->prepare($check_activo);
-            $check_activo_stmt->execute([$contenido_id]);
-            $check_activo_result = $check_activo_stmt->fetch(PDO::FETCH_ASSOC);
+            error_log("❌ Actividad NO encontrada o inactiva");
+            return null;
+        }
+        
+    } catch (PDOException $e) {
+        error_log("❌ ERROR: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Obtiene el progreso detallado de un contenido
+ */
+function obtenerProgresoDetallado($estudiante_id, $contenido_id) {
+    $conexion = getConexion();
+    
+    try {
+        // Obtener materiales adicionales completados
+        $stmt_mat = $conexion->prepare("
+            SELECT material_id, completado
+            FROM progreso_contenido 
+            WHERE estudiante_id = ? AND contenido_id = ? AND material_id IS NOT NULL
+        ");
+        $stmt_mat->execute([$estudiante_id, $contenido_id]);
+        $materiales = $stmt_mat->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Obtener progreso principal
+        $stmt_princ = $conexion->prepare("
+            SELECT principales_completados 
+            FROM progreso_contenido 
+            WHERE estudiante_id = ? AND contenido_id = ? AND material_id IS NULL
+        ");
+        $stmt_princ->execute([$estudiante_id, $contenido_id]);
+        $principal = $stmt_princ->fetch(PDO::FETCH_ASSOC);
+        
+        // Obtener total de recursos principales
+        $stmt_cont = $conexion->prepare("SELECT enlace, archivo_adjunto FROM contenidos WHERE id = ?");
+        $stmt_cont->execute([$contenido_id]);
+        $cont = $stmt_cont->fetch(PDO::FETCH_ASSOC);
+        
+        $recursos_principales = 0;
+        if (!empty($cont['enlace'])) $recursos_principales++;
+        if (!empty($cont['archivo_adjunto'])) $recursos_principales++;
+        
+        $resultado = [
+            'video_completado' => false,
+            'documento_completado' => false,
+            'materiales_completados' => [],
+            'porcentaje_total' => 0
+        ];
+        
+        // Determinar qué principales están completados
+        if ($principal && isset($principal['principales_completados'])) {
+            $completados = (int)$principal['principales_completados'];
             
-            if ($check_activo_result) {
-                error_log("⚠️ Actividad existe pero activo = " . ($check_activo_result['activo'] ? 'true' : 'false'));
-            } else {
-                error_log("❌ No hay actividad vinculada a este contenido");
+            if ($recursos_principales >= 1 && $completados >= 1) {
+                // Si hay video, marcarlo como completado
+                if (!empty($cont['enlace'])) {
+                    $resultado['video_completado'] = true;
+                }
             }
+            
+            if ($recursos_principales >= 2 && $completados >= 2) {
+                // Si hay documento, marcarlo como completado
+                if (!empty($cont['archivo_adjunto'])) {
+                    $resultado['documento_completado'] = true;
+                }
+            }
+        }
+        
+        // Materiales adicionales
+        foreach ($materiales as $m) {
+            $resultado['materiales_completados'][$m['material_id']] = $m['completado'];
         }
         
         return $resultado;
         
     } catch (PDOException $e) {
-        error_log("❌ ERROR obtenerActividadPorContenido: " . $e->getMessage());
-        return null;
+        error_log("Error en obtenerProgresoDetallado: " . $e->getMessage());
+        return [
+            'video_completado' => false,
+            'documento_completado' => false,
+            'materiales_completados' => [],
+            'porcentaje_total' => 0
+        ];
+    }
+}
+/**
+ * Reinicia una entrega para permitir que el estudiante la modifique.
+ * Cambia el estado a 'pendiente' o elimina el registro según prefieras.
+ */
+function reiniciarEntrega($conexion, $entrega_id, $docente_id, $motivo = 'Reapertura por docente') {
+    try {
+        // Opción 1: Cambiar el estado a 'pendiente' para que se pueda modificar
+        $stmt = $conexion->prepare("
+            UPDATE entregas_estudiantes 
+            SET estado = 'pendiente' 
+            WHERE id = ?
+        ");
+        $stmt->execute([$entrega_id]);
+
+        // Opcional: Guardar un log de esta acción para auditoría
+        $stmt_log = $conexion->prepare("
+            INSERT INTO logs_acciones (usuario_id, accion, descripcion, fecha)
+            VALUES (?, 'reabrir_entrega', ?, NOW())
+        ");
+        $stmt_log->execute([$docente_id, $motivo]);
+
+        return ['success' => true, 'mensaje' => 'Entrega reabierta correctamente.'];
+
+    } catch (Exception $e) {
+        error_log("Error al reiniciar entrega: " . $e->getMessage());
+        return ['success' => false, 'error' => 'Error al reabrir la entrega.'];
     }
 }

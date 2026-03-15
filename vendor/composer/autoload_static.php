@@ -7,6 +7,7 @@ namespace Composer\Autoload;
 class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
 {
     public static $files = array (
+        '7b11c4dc42b3b3023073cb14e519683c' => __DIR__ . '/..' . '/ralouphie/getallheaders/src/getallheaders.php',
         '72243e5536b63e298acb6476f01f1aff' => __DIR__ . '/..' . '/thecodingmachine/safe/lib/special_cases.php',
         '3f648889e687f31c52f949ba8a9d0873' => __DIR__ . '/..' . '/thecodingmachine/safe/generated/apache.php',
         'eeb4581d958421a4244aaa4167c6a575' => __DIR__ . '/..' . '/thecodingmachine/safe/generated/apcu.php',
@@ -87,46 +88,88 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         '4af1dca6db8c527c6eed27bff85ff0e5' => __DIR__ . '/..' . '/thecodingmachine/safe/generated/yaz.php',
         'fe43ca06499ac37bc2dedd823af71eb5' => __DIR__ . '/..' . '/thecodingmachine/safe/generated/zip.php',
         '356736db98a6834f0a886b8d509b0ecd' => __DIR__ . '/..' . '/thecodingmachine/safe/generated/zlib.php',
+        '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
+        '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
     );
 
     public static $prefixLengthsPsr4 = array (
-        'S' =>
+        'o' => 
+        array (
+            'onesignal\\client\\' => 17,
+        ),
+        'S' => 
         array (
             'Svg\\' => 4,
             'Sabberworm\\CSS\\' => 15,
         ),
-        'M' =>
+        'P' => 
+        array (
+            'Psr\\Http\\Message\\' => 17,
+            'Psr\\Http\\Client\\' => 16,
+        ),
+        'M' => 
         array (
             'Masterminds\\' => 12,
         ),
-        'F' =>
+        'G' => 
+        array (
+            'GuzzleHttp\\Psr7\\' => 16,
+            'GuzzleHttp\\Promise\\' => 19,
+            'GuzzleHttp\\' => 11,
+        ),
+        'F' => 
         array (
             'FontLib\\' => 8,
         ),
-        'D' =>
+        'D' => 
         array (
             'Dompdf\\' => 7,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
-        'Svg\\' =>
+        'onesignal\\client\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/onesignal/onesignal-php-api/lib',
+        ),
+        'Svg\\' => 
         array (
             0 => __DIR__ . '/..' . '/dompdf/php-svg-lib/src/Svg',
         ),
-        'Sabberworm\\CSS\\' =>
+        'Sabberworm\\CSS\\' => 
         array (
             0 => __DIR__ . '/..' . '/sabberworm/php-css-parser/src',
         ),
-        'Masterminds\\' =>
+        'Psr\\Http\\Message\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/psr/http-factory/src',
+            1 => __DIR__ . '/..' . '/psr/http-message/src',
+        ),
+        'Psr\\Http\\Client\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/psr/http-client/src',
+        ),
+        'Masterminds\\' => 
         array (
             0 => __DIR__ . '/..' . '/masterminds/html5/src',
         ),
-        'FontLib\\' =>
+        'GuzzleHttp\\Psr7\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/guzzlehttp/psr7/src',
+        ),
+        'GuzzleHttp\\Promise\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/guzzlehttp/promises/src',
+        ),
+        'GuzzleHttp\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/guzzlehttp/guzzle/src',
+        ),
+        'FontLib\\' => 
         array (
             0 => __DIR__ . '/..' . '/dompdf/php-font-lib/src/FontLib',
         ),
-        'Dompdf\\' =>
+        'Dompdf\\' => 
         array (
             0 => __DIR__ . '/..' . '/dompdf/dompdf/src',
         ),

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 // Recuperar mensajes de sesión
 $mensaje = '';
@@ -180,23 +181,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $contenidos_docente = [];
 try {
     $conexion = getConexion();
+    
+    // Primero, obtener el total de estudiantes en el grado/sección del docente
+    $stmt_total_estudiantes = $conexion->prepare("
+        SELECT COUNT(*) as total
+        FROM estudiantes e
+        INNER JOIN usuarios u ON e.usuario_id = u.id
+        WHERE u.rol = 'Estudiante' 
+            AND e.grado = ? 
+            AND e.seccion = ?
+    ");
+    $stmt_total_estudiantes->execute([$grado_docente, $seccion_docente]);
+    $total_estudiantes_clase = $stmt_total_estudiantes->fetchColumn();
+    
+    // Consulta principal con conteo de estudiantes que han visto
     $query = "
-        SELECT c.id, c.titulo, c.asignatura, c.grado, c.seccion, 
-            c.fecha_publicacion, c.docente_id, c.enlace, c.archivo_adjunto,
-            c.activo, c.creado_en, c.videos_adicionales,
-            COUNT(p.id) as total_estudiantes,
-            COALESCE(AVG(p.porcentaje_visto), 0) as progreso_promedio
+        SELECT 
+            c.id, 
+            c.titulo, 
+            c.asignatura, 
+            c.grado, 
+            c.seccion, 
+            c.fecha_publicacion, 
+            c.docente_id, 
+            c.enlace, 
+            c.archivo_adjunto,
+            c.activo, 
+            c.creado_en, 
+            c.videos_adicionales,
+            ? as total_estudiantes_clase,
+            COUNT(DISTINCT CASE WHEN p.completado = true AND p.material_id IS NULL THEN p.estudiante_id END) as estudiantes_vieron
         FROM contenidos c
-        LEFT JOIN progreso_contenido p ON c.id = p.contenido_id
+        LEFT JOIN progreso_contenido p ON c.id = p.contenido_id AND p.material_id IS NULL
         WHERE c.docente_id = ?
-        GROUP BY c.id, c.titulo, c.asignatura, c.grado, c.seccion, 
-                c.fecha_publicacion, c.docente_id, c.enlace, c.archivo_adjunto,
-                c.activo, c.creado_en, c.videos_adicionales
-        ORDER BY c.fecha_publicacion DESC
+        GROUP BY 
+            c.id, 
+            c.titulo, 
+            c.asignatura, 
+            c.grado, 
+            c.seccion, 
+            c.fecha_publicacion, 
+            c.docente_id, 
+            c.enlace, 
+            c.archivo_adjunto,
+            c.activo, 
+            c.creado_en, 
+            c.videos_adicionales
     ";
+    
     $stmt = $conexion->prepare($query);
-    $stmt->execute([$usuario_id]);
+    $stmt->execute([$total_estudiantes_clase, $usuario_id]);
     $contenidos_docente = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Ordenar en PHP por fecha más reciente primero
+    usort($contenidos_docente, function($a, $b) {
+        $fecha_a = strtotime($a['fecha_publicacion'] ?? '1970-01-01');
+        $fecha_b = strtotime($b['fecha_publicacion'] ?? '1970-01-01');
+        
+        if ($fecha_a == $fecha_b) {
+            return $b['id'] - $a['id'];
+        }
+        return $fecha_b - $fecha_a;
+    });
+    
+    error_log("=== CONTENIDOS DEL DOCENTE ORDENADOS ===");
+    foreach ($contenidos_docente as $i => $c) {
+        error_log(($i+1) . ". ID: " . $c['id'] . " | Fecha: " . $c['fecha_publicacion'] . " | Título: " . $c['titulo']);
+        error_log("   👥 Vieron: " . ($c['estudiantes_vieron'] ?? 0) . " de " . ($c['total_estudiantes_clase'] ?? 0));
+    }
+    
 } catch (Exception $e) {
     error_log("Error obteniendo contenidos: " . $e->getMessage());
 }
@@ -209,6 +262,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Contenidos - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -288,6 +342,12 @@ try {
             background-color: rgba(220, 53, 69, 0.1);
             border-color: #dc3545;
         }
+        /* Enlace volver */
+        .back-link {
+            display: block;
+            color: #EF5E8E;
+            text-decoration: none;
+        }
         @media (max-width: 768px) {
             .form-grid { grid-template-columns: 1fr; }
             .form-group.full-width { grid-column: span 1; }
@@ -295,29 +355,7 @@ try {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                   <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="perfil.php" class="menu-item">Mi Perfil</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
@@ -326,6 +364,12 @@ try {
     <div class="banner-content">
         <h1 class="banner-title">Gestión de Contenidos</h1>
     </div>
+    <!-- 🔴 FLECHA DE VOLVER A LA IZQUIERDA -->
+    <?php if (basename($_SERVER['PHP_SELF']) != 'index.php'): ?>
+        <div style="max-width: 1200px; margin: 10px 0 10px 40px; padding: 0; width: 100%;">
+            <a href="index.php" class="back-link">← Volver al Panel</a>
+        </div>
+    <?php endif; ?>
 
     <main class="main-content">
         <?php if ($mensaje): ?>
@@ -429,8 +473,8 @@ try {
                                 <th>Asignatura</th>
                                 <th>Grado/Sección</th>
                                 <th>Fecha</th>
-                                <th>Estudiantes</th>
-                                <th>Progreso</th>
+                                <th>Estudiantes que vieron</th>
+                                <th>% de la clase</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -453,21 +497,42 @@ try {
                                         ?>
                                     </td>
                                     <td><?php echo date('d/m/Y', strtotime($cont['fecha_publicacion'])); ?></td>
-                                    <td><?php echo $cont['total_estudiantes'] ?? 0; ?></td>
+                                    
+                                    <!-- ✅ NUEVO: Estudiantes que vieron / Total -->
                                     <td>
+                                        <strong><?php echo ($cont['estudiantes_vieron'] ?? 0); ?> / <?php echo ($cont['total_estudiantes_clase'] ?? 0); ?></strong>
+                                        <br>
+                                        <small style="color: #666; font-size: 11px;">
+                                            <?php 
+                                            $total = $cont['total_estudiantes_clase'] ?? 0;
+                                            $vieron = $cont['estudiantes_vieron'] ?? 0;
+                                            $porcentaje = $total > 0 ? round(($vieron / $total) * 100) : 0;
+                                            echo $porcentaje . '% de la clase';
+                                            ?>
+                                        </small>
+                                    </td>
+                                    
+                                    <!-- ✅ NUEVO: Barra de porcentaje de estudiantes que vieron -->
+                                    <td style="min-width: 120px;">
                                         <?php 
-                                        $promedio = round($cont['progreso_promedio'] ?? 0);
-                                        echo $promedio . '%';
+                                        $total = $cont['total_estudiantes_clase'] ?? 0;
+                                        $vieron = $cont['estudiantes_vieron'] ?? 0;
+                                        $porcentaje = $total > 0 ? round(($vieron / $total) * 100) : 0;
                                         ?>
-                                        <div class="progress-bar">
-                                            <div class="progress-fill" style="width: <?php echo $promedio; ?>%"></div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="font-weight: 600; min-width: 40px;"><?php echo $porcentaje; ?>%</span>
+                                            <div class="progress-bar" style="flex: 1;">
+                                                <div class="progress-fill" style="width: <?php echo $porcentaje; ?>%"></div>
+                                            </div>
                                         </div>
                                     </td>
+                                    
                                     <td class="action-btns">
                                         <a href="editar_contenido.php?id=<?php echo $cont['id']; ?>" class="btn-icon" title="Editar">✏️</a>
                                         <a href="estadisticas_contenido.php?id=<?php echo $cont['id']; ?>" class="btn-icon" title="Estadísticas">📊</a>
                                         <a href="previsualizar_contenido.php?id=<?php echo $cont['id']; ?>" class="btn-icon" title="Previsualizar">👁️</a>
                                         <a href="#" onclick="eliminarContenido(<?php echo $cont['id']; ?>, '<?php echo addslashes($cont['titulo']); ?>')" class="btn-icon eliminar" title="Eliminar">🗑️</a>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

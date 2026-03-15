@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -19,7 +20,23 @@ $promedio = 0;
 try {
     $conexion = getConexion();
     
-    // ✅ QUERY 1: Calificadas (SIN asignatura - esa columna no existe)
+    // 🔴 OBTENER GRADO Y SECCIÓN DEL ESTUDIANTE
+    $query_est = "SELECT grado, seccion FROM estudiantes WHERE usuario_id = ?";
+    $stmt_est = $conexion->prepare($query_est);
+    $stmt_est->execute([$estudiante_id]);
+    $estudiante = $stmt_est->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$estudiante) {
+        error_log("❌ Estudiante no encontrado: " . $estudiante_id);
+        throw new Exception("Estudiante no encontrado");
+    }
+    
+    $grado = $estudiante['grado'];
+    $seccion = $estudiante['seccion'];
+    
+    error_log("✅ Estudiante ID: $estudiante_id - Grado: $grado - Sección: $seccion");
+    
+    // ✅ QUERY 1: Calificadas (SOLO actividades del grado/sección del estudiante)
     $query_calificadas = "
         SELECT 
             e.id,
@@ -27,44 +44,63 @@ try {
             e.calificacion,
             e.observaciones,
             e.fecha_entrega,
-            a.titulo as actividad_titulo
+            a.titulo as actividad_titulo,
+            a.grado,
+            a.seccion
         FROM entregas_estudiantes e
         INNER JOIN actividades a ON e.actividad_id = a.id
-        WHERE e.estudiante_id = " . (int)$estudiante_id . "
-        AND e.calificacion IS NOT NULL
+        WHERE e.estudiante_id = ? 
+            AND e.calificacion IS NOT NULL
+            AND a.grado = ? 
+            AND a.seccion = ?
         ORDER BY e.fecha_entrega DESC
     ";
     
-    // ✅ QUERY 2: Pendientes (SIN asignatura)
+    // ✅ QUERY 2: Pendientes (SOLO actividades del grado/sección del estudiante)
     $query_pendientes = "
         SELECT 
             a.id,
             a.titulo as actividad_titulo,
             a.fecha_entrega,
+            a.grado,
+            a.seccion,
             NULL as calificacion,
             NULL as observaciones
         FROM actividades a
         WHERE a.activo = true
-        AND a.id NOT IN (
-            SELECT actividad_id FROM entregas_estudiantes 
-            WHERE estudiante_id = " . (int)$estudiante_id . "
-        )
+            AND a.grado = ? 
+            AND a.seccion = ?
+            AND a.id NOT IN (
+                SELECT actividad_id FROM entregas_estudiantes 
+                WHERE estudiante_id = ?
+            )
         ORDER BY a.fecha_entrega DESC
     ";
     
-    // Ejecutar queries
-    $stmt = $conexion->query($query_calificadas);
+    // Ejecutar queries con los parámetros correctos
+    $stmt = $conexion->prepare($query_calificadas);
+    $stmt->execute([$estudiante_id, $grado, $seccion]);
     $calificaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    $stmt = $conexion->query($query_pendientes);
+    $stmt = $conexion->prepare($query_pendientes);
+    $stmt->execute([$grado, $seccion, $estudiante_id]);
     $pendientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    error_log("=== CALIFICACIONES ===");
+    error_log("=== CALIFICACIONES FILTRADAS ===");
+    error_log("Grado/Sección del estudiante: $grado - $seccion");
     error_log("Calificadas: " . count($calificaciones));
     error_log("Pendientes: " . count($pendientes));
     
+    // 🔴 VERIFICAR QUE TODAS LAS ACTIVIDADES TENGAN EL GRADO/SECCIÓN CORRECTO
+    foreach ($calificaciones as $c) {
+        error_log("Calificada: {$c['actividad_titulo']} - Grado: {$c['grado']} - Sección: {$c['seccion']}");
+    }
+    foreach ($pendientes as $p) {
+        error_log("Pendiente: {$p['actividad_titulo']} - Grado: {$p['grado']} - Sección: {$p['seccion']}");
+    }
+    
 } catch (Exception $e) {
-    error_log("Error: " . $e->getMessage());
+    error_log("Error en calificaciones: " . $e->getMessage());
 }
 
 // Estadísticas
@@ -81,110 +117,714 @@ if ($total_calificadas > 0) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Calificaciones - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --text-dark: #333333; --text-muted: #666666; --border: #E0E0E0;
-            --surface: #FFFFFF; --background: #F5F5F5;
-            --header-green: #4BC4E7; --success: #4BC4E7; --warning: #ffc107;
-            --primary: #4a90e2;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        body { font-family: 'Inter', sans-serif; background-color: var(--background); color: var(--text-dark); min-height: 100vh; display: flex; flex-direction: column; }
-        
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; height: 60px; background-color: var(--surface); border-bottom: 1px solid var(--border); }
-        .logo { height: 40px; }
-        .header-right { display: flex; align-items: center; gap: 16px; }
-        .icon-btn { width: 36px; height: 36px; border-radius: 50%; background-color: #F0F0F0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .icon-btn img { width: 20px; height: 20px; object-fit: contain; }
-        .menu-dropdown { position: absolute; top: 60px; right: 24px; background: white; border: 1px solid var(--border); border-radius: 8px; display: none; }
-        .menu-item { padding: 10px 16px; font-size: 14px; color: var(--text-dark); text-decoration: none; display: block; }
-        
-        .banner { position: relative; height: 100px; overflow: hidden; }
-        .banner-image { width: 100%; height: 100%; object-fit: cover; }
-        .banner-content { text-align: center; position: relative; z-index: 2; max-width: 800px; padding: 20px; margin: 0 auto; }
-        .banner-title { font-size: 36px; font-weight: 700; margin-bottom: 8px; }
-        .banner-subtitle { font-size: 18px; color: var(--text-muted); }
-        
-        .main-content { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
-        .content-container { width: 100%; max-width: 1200px; }
-        
-        .btn-regresar { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: white; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: var(--text-dark); margin-bottom: 20px; }
-        
-        .resumen-card { background: var(--surface); border-radius: 16px; padding: 32px; margin-bottom: 32px; box-shadow: 0 6px 16px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
-        .estadistica { text-align: center; }
-        .estadistica-numero { font-size: 36px; font-weight: 700; color: var(--header-green); }
-        .estadistica-label { font-size: 13px; color: var(--text-muted); }
-        
-        .btn-export { background: var(--primary); color: white; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
-        
-        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
-        .tab { padding: 12px 24px; background: white; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 600; }
-        .tab.active { background: var(--header-green); color: white; border-color: var(--header-green); }
-        
-        .tabla-card { background: var(--surface); border-radius: 16px; padding: 32px; box-shadow: 0 6px 16px rgba(0,0,0,0.05); overflow-x: auto; }
-        .calificaciones-table { width: 100%; border-collapse: collapse; }
-        .calificaciones-table thead { background: var(--header-green); color: white; }
-        .calificaciones-table th, .calificaciones-table td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); }
-        .calificaciones-table tbody tr:hover { background: #f8f9fa; cursor: pointer; }
-        
-        .badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .badge-excelente { background: rgba(40,167,69,0.1); color: var(--success); }
-        .badge-bueno { background: rgba(74,144,226,0.1); color: var(--primary); }
-        .badge-pendiente { background: rgba(255,193,7,0.1); color: var(--warning); }
-        
-        .no-datos { text-align: center; padding: 60px 20px; }
-        .no-datos-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.3; }
-        
-        .footer { height: 50px; background: var(--surface); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; font-size: 13px; }
-        
+
+        :root {
+            --text-dark: #333333;
+            --text-muted: #666666;
+            --border: #E0E0E0;
+            --surface: #FFFFFF;
+            --background: #F5F5F5;
+            --primary-cyan: #4BC4E7;
+            --primary-pink: #EF5E8E;
+            --primary-lime: #C2D54E;
+            --primary-purple: #9b8afb;
+            --success: #28a745;
+            --warning: #ffc107;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header responsive */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            height: 60px;
+            background-color: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: relative;
+            z-index: 100;
+        }
+
+        @media (min-width: 768px) {
+            .header {
+                padding: 0 24px;
+            }
+        }
+
+        .logo {
+            height: 32px;
+        }
+
+        @media (min-width: 768px) {
+            .logo {
+                height: 40px;
+            }
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #F0F0F0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .icon-btn img {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+        }
+
+        .menu-dropdown {
+            position: absolute;
+            top: 60px;
+            right: 16px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: none;
+            min-width: 180px;
+            z-index: 1000;
+        }
+
+        @media (min-width: 768px) {
+            .menu-dropdown {
+                right: 24px;
+            }
+        }
+
+        .menu-item {
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--text-dark);
+            text-decoration: none;
+            display: block;
+        }
+
+        .menu-item:hover {
+            background-color: #F8F8F8;
+        }
+
+        /* Banner responsive */
+        .banner {
+            position: relative;
+            height: 80px;
+            overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .banner {
+                height: 100px;
+            }
+        }
+
+        .banner-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: top;
+        }
+
+        .banner-content {
+            text-align: center;
+            padding: 16px 16px 8px;
+        }
+
+        @media (min-width: 768px) {
+            .banner-content {
+                padding: 20px;
+            }
+        }
+
+        .banner-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        @media (min-width: 768px) {
+            .banner-title {
+                font-size: 36px;
+            }
+        }
+
+        .banner-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        @media (min-width: 768px) {
+            .banner-subtitle {
+                font-size: 18px;
+            }
+        }
+
+        /* Contenido principal */
+        .main-content {
+            flex: 1;
+            padding: 20px 16px;
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 40px 20px;
+            }
+        }
+
+        .content-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Botón regresar */
+        .btn-regresar {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-dark);
+            margin-bottom: 20px;
+            font-size: 14px;
+            transition: transform 0.2s;
+        }
+
+        .btn-regresar:hover {
+            transform: translateX(-2px);
+        }
+
+        @media (min-width: 768px) {
+            .btn-regresar {
+                padding: 10px 20px;
+                font-size: 16px;
+            }
+        }
+
+        /* Tarjeta de resumen */
+        .resumen-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .resumen-card {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                padding: 32px;
+            }
+        }
+
+        .resumen-header h2 {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+
+        .resumen-header p {
+            font-size: 14px;
+        }
+
+        .estadisticas-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        @media (min-width: 768px) {
+            .estadisticas-container {
+                display: flex;
+                gap: 32px;
+            }
+        }
+
+        .estadistica {
+            text-align: center;
+        }
+
+        .estadistica-numero {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-cyan);
+        }
+
+        @media (min-width: 768px) {
+            .estadistica-numero {
+                font-size: 36px;
+            }
+        }
+
+        .estadistica-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        @media (min-width: 768px) {
+            .estadistica-label {
+                font-size: 13px;
+            }
+        }
+
+        .btn-export {
+            background: var(--primary-cyan);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        @media (min-width: 768px) {
+            .btn-export {
+                width: auto;
+                padding: 12px 24px;
+            }
+        }
+
+        .btn-export:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .tabs {
+                flex-direction: row;
+            }
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .tab {
+                width: auto;
+            }
+        }
+
+        .tab.active {
+            background: var(--primary-cyan);
+            color: white;
+            border-color: var(--primary-cyan);
+        }
+
+        /* Tarjeta de tabla */
+        .tabla-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.05);
+        }
+
+        @media (min-width: 768px) {
+            .tabla-card {
+                padding: 32px;
+            }
+        }
+
+        .tabla-card h3 {
+            font-size: 18px;
+            margin-bottom: 16px;
+        }
+
+        @media (min-width: 768px) {
+            .tabla-card h3 {
+                font-size: 20px;
+                margin-bottom: 24px;
+            }
+        }
+
+        /* Tabla responsive */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 0 -20px;
+            padding: 0 20px;
+        }
+
+        .calificaciones-table {
+            width: 100%;
+            min-width: 600px;
+            border-collapse: collapse;
+        }
+
+        .calificaciones-table thead {
+            background: var(--primary-cyan);
+            color: white;
+        }
+
+        .calificaciones-table th,
+        .calificaciones-table td {
+            padding: 12px 10px;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        @media (min-width: 768px) {
+            .calificaciones-table th,
+            .calificaciones-table td {
+                padding: 16px;
+            }
+        }
+
+        .calificaciones-table tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .calificaciones-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        /* Badges */
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        @media (min-width: 768px) {
+            .badge {
+                font-size: 12px;
+            }
+        }
+
+        .badge-excelente {
+            background: rgba(40,167,69,0.1);
+            color: var(--success);
+        }
+
+        .badge-bueno {
+            background: rgba(75,196,231,0.1);
+            color: var(--primary-cyan);
+        }
+
+        .badge-pendiente {
+            background: rgba(255,193,7,0.1);
+            color: var(--warning);
+        }
+
+        /* Botón de acción en tabla */
+        .btn-ver {
+            background: var(--primary-purple);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Vista de cards para móvil */
+        .mobile-cards {
+            display: none;
+        }
+
+        .actividad-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .card-titulo {
+            font-weight: 700;
+            color: var(--text-dark);
+            font-size: 16px;
+        }
+
+        .card-badge {
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .card-detalle {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .detalle-item {
+            font-size: 13px;
+        }
+
+        .detalle-label {
+            color: var(--text-muted);
+            display: block;
+            font-size: 11px;
+        }
+
+        .detalle-valor {
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+
+        .card-btn {
+            background: var(--primary-purple);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        @media (max-width: 600px) {
+            .table-responsive {
+                display: none;
+            }
+            .mobile-cards {
+                display: block;
+            }
+        }
+
+        /* No datos */
+        .no-datos {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .no-datos-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        @media (min-width: 768px) {
+            .no-datos-icon {
+                font-size: 64px;
+            }
+        }
+
+        .no-datos h3 {
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .no-datos p {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
         /* Modal */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal.active { display: flex; }
-        .modal-content { background: white; border-radius: 16px; padding: 32px; max-width: 600px; width: 90%; position: relative; }
-        .modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 24px; cursor: pointer; }
-        .modal-info { margin-bottom: 16px; }
-        .modal-info-label { font-size: 14px; color: var(--text-muted); }
-        .modal-info-value { font-size: 16px; font-weight: 600; }
-        .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
-        .btn-modal { padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; }
-        .btn-modal-primary { background: var(--primary); color: white; }
-        .btn-modal-secondary { background: #f0f0f0; }
-        
-        @media (max-width: 768px) {
-            .resumen-card { flex-direction: column; text-align: center; }
-            .tabs { flex-direction: column; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 600px;
+            width: 100%;
+            position: relative;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        @media (min-width: 768px) {
+            .modal-content {
+                padding: 32px;
+            }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-info {
+            margin-bottom: 16px;
+        }
+
+        .modal-info-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        @media (min-width: 768px) {
+            .modal-info-label {
+                font-size: 14px;
+            }
+        }
+
+        .modal-info-value {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        @media (min-width: 768px) {
+            .modal-info-value {
+                font-size: 16px;
+            }
+        }
+
+        .modal-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        @media (min-width: 768px) {
+            .modal-actions {
+                flex-direction: row;
+                gap: 12px;
+            }
+        }
+
+        .btn-modal {
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .btn-modal {
+                width: auto;
+            }
+        }
+
+        .btn-modal-primary {
+            background: var(--primary-cyan);
+            color: white;
+        }
+
+        .btn-modal-secondary {
+            background: #f0f0f0;
+            color: var(--text-dark);
+        }
+
+        /* Footer */
+        .footer {
+            height: 50px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        @media (min-width: 768px) {
+            .footer {
+                padding: 0 24px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
-        <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
+        <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image" onerror="this.style.display='none'">
     </div>
     
     <div class="banner-content">
@@ -196,12 +836,14 @@ if ($total_calificadas > 0) {
         <div class="content-container">
             <a href="index.php" class="btn-regresar">← Volver al Panel</a>
 
+            <!-- Resumen -->
             <div class="resumen-card">
-                <div>
+                <div class="resumen-header">
                     <h2>Tu Desempeño</h2>
                     <p style="color: var(--text-muted);">Resumen de calificaciones</p>
                 </div>
-                <div style="display: flex; gap: 32px;">
+                
+                <div class="estadisticas-container">
                     <div class="estadistica">
                         <div class="estadistica-numero"><?php echo $total_calificadas; ?></div>
                         <div class="estadistica-label">Calificadas</div>
@@ -215,140 +857,234 @@ if ($total_calificadas > 0) {
                         <div class="estadistica-label">Promedio</div>
                     </div>
                 </div>
-                <button class="btn-export" onclick="exportarPDF()"> Descargar PDF</button>
+                
+                <button class="btn-export" onclick="exportarPDF()">📄 Descargar PDF</button>
             </div>
 
+            <!-- Tabs -->
             <div class="tabs">
-                <div class="tab active" onclick="mostrarTab('calificadas')"> Calificadas (<?php echo $total_calificadas; ?>)</div>
-                <div class="tab" onclick="mostrarTab('pendientes')"> Pendientes (<?php echo $total_pendientes; ?>)</div>
+                <div class="tab active" onclick="mostrarTab('calificadas', this)">📊 Calificadas (<?php echo $total_calificadas; ?>)</div>
+                <div class="tab" onclick="mostrarTab('pendientes', this)">⏳ Pendientes (<?php echo $total_pendientes; ?>)</div>
             </div>
 
+            <!-- Tab Calificadas -->
             <div id="tab-calificadas" class="tabla-card">
-                <h3 style="margin-bottom: 24px;">Actividades Calificadas</h3>
+                <h3>Actividades Calificadas</h3>
+                
                 <?php if (count($calificaciones) > 0): ?>
-                    <table class="calificaciones-table">
-                        <thead>
-                            <tr>
-                                <th>Actividad</th>
-                                <th>Asignatura</th>
-                                <th>Fecha</th>
-                                <th>Nota</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($calificaciones as $cal): ?>
-                                <tr onclick="verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">
-                                    <td><strong><?php echo htmlspecialchars($cal['actividad_titulo']); ?></strong></td>
-                                    <td><?php echo htmlspecialchars($cal['asignatura'] ?? 'General'); ?></td>
-                                    <td><?php echo $cal['fecha_entrega'] ? date('d/m/Y', strtotime($cal['fecha_entrega'])) : 'Sin fecha'; ?></td>
-                                    <td><span class="badge badge-bueno"><?php echo number_format($cal['calificacion'], 2); ?>/20</span></td>
-                                    <td><button class="btn-modal btn-modal-secondary" style="padding: 6px 12px;" onclick="event.stopPropagation(); verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">Ver</button></td>
+                    <!-- Vista Desktop (tabla) -->
+                    <div class="table-responsive">
+                        <table class="calificaciones-table">
+                            <thead>
+                                <tr>
+                                    <th>Actividad</th>
+                                    <th>Fecha</th>
+                                    <th>Nota</th>
+                                    <th>Acción</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($calificaciones as $cal): ?>
+                                    <tr onclick="verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">
+                                        <td><strong><?php echo htmlspecialchars($cal['actividad_titulo']); ?></strong></td>
+                                        <td><?php echo $cal['fecha_entrega'] ? date('d/m/Y', strtotime($cal['fecha_entrega'])) : 'Sin fecha'; ?></td>
+                                        <td><span class="badge badge-bueno"><?php echo number_format($cal['calificacion'], 2); ?>/20</span></td>
+                                        <td>
+                                            <button class="btn-ver" onclick="event.stopPropagation(); verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">
+                                                Ver
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Vista Móvil (cards) -->
+                    <div class="mobile-cards">
+                        <?php foreach ($calificaciones as $cal): ?>
+                            <div class="actividad-card" onclick="verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">
+                                <div class="card-header">
+                                    <span class="card-titulo"><?php echo htmlspecialchars($cal['actividad_titulo']); ?></span>
+                                    <span class="card-badge badge-bueno"><?php echo number_format($cal['calificacion'], 2); ?>/20</span>
+                                </div>
+                                
+                                <div class="card-detalle">
+                                    <div class="detalle-item">
+                                        <span class="detalle-label">Fecha</span>
+                                        <span class="detalle-valor"><?php echo $cal['fecha_entrega'] ? date('d/m/Y', strtotime($cal['fecha_entrega'])) : 'Sin fecha'; ?></span>
+                                    </div>
+                                </div>
+                                
+                                <div class="card-footer">
+                                    <button class="card-btn" onclick="event.stopPropagation(); verDetalle(<?php echo htmlspecialchars(json_encode($cal)); ?>)">
+                                        Ver detalles
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 <?php else: ?>
                     <div class="no-datos">
-                        <h3 style="color: var(--text-muted);">Actualmente no hay calificaciones disponibles</h3>
-                        <p style="color: var(--text-muted);">Vuelva a consultar más tarde.</p>
+                        <div class="no-datos-icon">📭</div>
+                        <h3>No hay calificaciones disponibles</h3>
+                        <p>Vuelve a consultar más tarde</p>
                     </div>
                 <?php endif; ?>
             </div>
 
+            <!-- Tab Pendientes -->
             <div id="tab-pendientes" class="tabla-card" style="display: none;">
-                <h3 style="margin-bottom: 24px;">Actividades Pendientes</h3>
+                <h3>Actividades Pendientes</h3>
+                
                 <?php if (count($pendientes) > 0): ?>
-                    <table class="calificaciones-table">
-                        <thead>
-                            <tr>
-                                <th>Actividad</th>
-                                <th>Asignatura</th>
-                                <th>Fecha Límite</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($pendientes as $pend): ?>
+                    <!-- Vista Desktop (tabla) -->
+                    <div class="table-responsive">
+                        <table class="calificaciones-table">
+                            <thead>
                                 <tr>
-                                    <td><strong><?php echo htmlspecialchars($pend['actividad_titulo']); ?></strong></td>
-                                    <td><?php echo htmlspecialchars($pend['asignatura'] ?? 'General'); ?></td>
-                                    <td><?php echo $pend['fecha_entrega'] ? date('d/m/Y', strtotime($pend['fecha_entrega'])) : 'Sin fecha'; ?></td>
-                                    <td><span class="badge badge-pendiente"> Pendiente</span></td>
+                                    <th>Actividad</th>
+                                    <th>Fecha Límite</th>
+                                    <th>Estado</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($pendientes as $pend): ?>
+                                    <tr>
+                                        <td><strong><?php echo htmlspecialchars($pend['actividad_titulo']); ?></strong></td>
+                                        <td><?php echo $pend['fecha_entrega'] ? date('d/m/Y', strtotime($pend['fecha_entrega'])) : 'Sin fecha'; ?></td>
+                                        <td><span class="badge badge-pendiente"> Pendiente</span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Vista Móvil (cards) -->
+                    <div class="mobile-cards">
+                        <?php foreach ($pendientes as $pend): ?>
+                            <div class="actividad-card">
+                                <div class="card-header">
+                                    <span class="card-titulo"><?php echo htmlspecialchars($pend['actividad_titulo']); ?></span>
+                                    <span class="card-badge badge-pendiente">Pendiente</span>
+                                </div>
+                                
+                                <div class="card-detalle">
+                                    <div class="detalle-item">
+                                        <span class="detalle-label">Fecha límite</span>
+                                        <span class="detalle-valor"><?php echo $pend['fecha_entrega'] ? date('d/m/Y', strtotime($pend['fecha_entrega'])) : 'Sin fecha'; ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 <?php else: ?>
                     <div class="no-datos">
-                        <h3 style="color: var(--text-muted);">¡Todo al día!</h3>
+                        <div class="no-datos-icon">🎉</div>
+                        <h3>¡Todo al día!</h3>
+                        <p>No tienes actividades pendientes</p>
                     </div>
                 <?php endif; ?>
             </div>
         </div>
     </main>
 
-    <!-- Modal -->
+    <!-- Modal de detalle -->
     <div id="modalDetalle" class="modal">
         <div class="modal-content">
             <button class="modal-close" onclick="cerrarModal()">&times;</button>
-            <h2 id="modalTitulo" style="margin-bottom: 24px;">Detalle</h2>
+            <h2 id="modalTitulo" style="margin-bottom: 24px; font-size: 20px;">Detalle</h2>
+            
             <div class="modal-info">
                 <div class="modal-info-label">Nota</div>
                 <div class="modal-info-value" id="modalNota">-</div>
             </div>
+            
             <div class="modal-info">
                 <div class="modal-info-label">Fecha</div>
                 <div class="modal-info-value" id="modalFecha">-</div>
             </div>
+            
             <div class="modal-info">
                 <div class="modal-info-label">Retroalimentación</div>
-                <div class="modal-info-value" id="modalRetro" style="font-weight: 400;">-</div>
+                <div class="modal-info-value" id="modalRetro" style="font-weight: 400; white-space: pre-line;">-</div>
             </div>
+            
             <div class="modal-actions">
-                <button class="btn-modal btn-modal-primary" onclick="exportarPDF()"> PDF</button>
+                <button class="btn-modal btn-modal-primary" onclick="exportarPDF()">📄 Exportar PDF</button>
                 <button class="btn-modal btn-modal-secondary" onclick="cerrarModal()">Cerrar</button>
             </div>
         </div>
     </div>
 
     <footer class="footer">
-        <span>SIEDUCRES v1.0</span>
+        <span>SIEDUCRES v2.0</span>
         <span>Soporte Técnico</span>
     </footer>
 
     <script>
-        document.getElementById('menu-toggle').addEventListener('click', function() {
-            const d = document.getElementById('dropdown');
-            d.style.display = d.style.display === 'block' ? 'none' : 'block';
+        // Toggle menú hamburguesa
+        document.getElementById('menu-toggle').addEventListener('click', function(e) {
+            e.stopPropagation();
+            const dropdown = document.getElementById('dropdown');
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
         });
 
-        function mostrarTab(tab) {
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('dropdown');
+            const toggle = document.getElementById('menu-toggle');
+            if (!toggle.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Función para cambiar entre tabs
+        function mostrarTab(tab, element) {
+            // Remover active de todos los tabs
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tabla-card').forEach(c => c.style.display = 'none');
-            event.target.classList.add('active');
+            // Agregar active al tab clickeado
+            element.classList.add('active');
+            
+            // Ocultar todos los contenidos de tabs
+            document.getElementById('tab-calificadas').style.display = 'none';
+            document.getElementById('tab-pendientes').style.display = 'none';
+            
+            // Mostrar el tab seleccionado
             document.getElementById('tab-' + tab).style.display = 'block';
         }
 
+        // Función para ver detalle de calificación
         function verDetalle(cal) {
-            document.getElementById('modalTitulo').textContent = cal.actividad_titulo;
-            document.getElementById('modalNota').textContent = cal.calificacion + '/20';
+            document.getElementById('modalTitulo').textContent = cal.actividad_titulo || 'Detalle';
+            document.getElementById('modalNota').textContent = (cal.calificacion ? cal.calificacion + '/20' : 'Sin calificación');
             document.getElementById('modalFecha').textContent = cal.fecha_entrega ? new Date(cal.fecha_entrega).toLocaleDateString('es-ES') : 'Sin fecha';
             document.getElementById('modalRetro').textContent = cal.observaciones || 'Sin retroalimentación';
             document.getElementById('modalDetalle').classList.add('active');
         }
 
+        // Función para cerrar modal
         function cerrarModal() {
             document.getElementById('modalDetalle').classList.remove('active');
         }
 
-        // Exportar PDF
+        // Función para exportar PDF
         function exportarPDF() {
-            // Abrir el generador de PDF en nueva pestaña
             window.open('generar_pdf_calificaciones.php', '_blank');
         }
 
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+        // Cerrar modal con tecla Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                cerrarModal();
+            }
+        });
+
+        // Cerrar modal al hacer clic fuera
+        document.getElementById('modalDetalle').addEventListener('click', function(e) {
+            if (e.target === this) {
+                cerrarModal();
+            }
+        });
     </script>
 </body>
 </html>

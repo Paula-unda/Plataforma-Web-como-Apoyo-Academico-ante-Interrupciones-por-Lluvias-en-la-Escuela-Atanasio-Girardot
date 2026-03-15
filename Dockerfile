@@ -21,6 +21,17 @@ RUN sed -i 's/;session.save_path = "\/tmp"/session.save_path = "\/tmp"/' /usr/lo
     
 # Directorio web
 COPY . /var/www/html/
+
+# =====================================================
+# 🚀 NUEVO: Copiar el Service Worker de OneSignal
+# =====================================================
+# Asumiendo que el archivo descargado está en la raíz de tu proyecto
+COPY OneSignalSDKWorker.js /var/www/html/OneSignalSDKWorker.js 
+
+# Dar permisos específicos (opcional pero seguro)
+RUN chmod 644 /var/www/html/OneSignalSDKWorker.js
+# =====================================================
+
 WORKDIR /var/www/html/
 
 EXPOSE 80

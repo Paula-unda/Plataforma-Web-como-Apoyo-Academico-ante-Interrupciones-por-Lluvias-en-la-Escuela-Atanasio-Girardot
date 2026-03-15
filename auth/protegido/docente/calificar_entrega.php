@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
     header('Location: ../../../login.php?error=Acceso+no+autorizado.');
@@ -47,7 +48,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':actividad_id' => $actividad_id,
             ':estudiante_id' => $estudiante_id
         ]);
-        
+        // Después de guardar la calificación
+        require_once '../includes/notificaciones_funciones.php';
+
+        // 1. NOTIFICAR AL ESTUDIANTE
+        enviarNotificacion(
+            $conexion,
+            $estudiante_id,
+            "📊 Actividad calificada",
+            "Tu actividad '$titulo_actividad' fue calificada con $calificacion/20",
+            'calificacion',
+            $entrega_id,
+            'entregas'
+        );
+
+        // 2. NOTIFICAR A SUS REPRESENTANTES
+        $stmt_rep = $conexion->prepare("
+            SELECT representante_id FROM representantes_estudiantes WHERE estudiante_id = ?
+        ");
+        $stmt_rep->execute([$estudiante_id]);
+        $representantes = $stmt_rep->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($representantes as $rep_id) {
+            enviarNotificacion(
+                $conexion,
+                $rep_id,
+                "📊 Actividad calificada",
+                "Tu representado obtuvo $calificacion/20 en '$titulo_actividad'",
+                'calificacion',
+                $entrega_id,
+                'entregas'
+            );
+        }
         $mensaje = 'Calificación guardada exitosamente';
         
     } catch (Exception $e) {
@@ -85,6 +117,7 @@ if (!$entrega) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calificar Entrega - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }

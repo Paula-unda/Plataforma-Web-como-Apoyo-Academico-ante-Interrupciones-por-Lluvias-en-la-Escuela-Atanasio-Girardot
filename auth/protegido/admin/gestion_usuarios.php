@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -55,6 +56,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Usuarios - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -432,6 +434,12 @@ try {
             transform: translateY(-2px);
             opacity: 0.9;
         }
+        /* TEMPORAL - PARA DEPURAR */
+        #modalPassword[style*="flex"] {
+            display: flex !important;
+            background-color: rgba(0,0,0,0.8) !important;
+            z-index: 9999 !important;
+        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -490,33 +498,34 @@ try {
             box-shadow: none !important;
             border: none !important;
         }
+        /* Ajustes para el modal de contraseña */
+        #modalPassword .modal-content {
+            background: white;
+            border-top: 4px solid var(--primary-purple);
+        }
+
+        #passwordContent {
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        #passwordText {
+            user-select: all; /* Facilita seleccionar todo el texto */
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+        }
+        /* Enlace volver */
+        .back-link {
+            display: block;
+            color: var(--primary-pink);
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Encabezado -->
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-
-            <div class="menu-dropdown" id="dropdown">
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <!-- Banner -->
     <div class="banner">
@@ -526,12 +535,19 @@ try {
             <p class="banner-subtitle">Plataforma para la recuperación de clases interrumpidas por condiciones climáticas</p>
         </div>
     </div>
-
+    
     <!-- Contenido principal -->
     <main class="main-content">
         <div class="page-header-section">
             <h1 class="page-title">Gestión de usuarios</h1>
+            <!-- 🔴 FLECHA DE VOLVER A LA IZQUIERDA -->
+            <?php if (basename($_SERVER['PHP_SELF']) != 'index.php'): ?>
+                <div style="max-width: 1200px; margin: 10px 0 10px 40px; padding: 0; width: 100%;">
+                    <a href="index.php" class="back-link">← Volver al Panel</a>
+                </div>
+            <?php endif; ?>
             <div class="header-actions">
+                
                 <div class="search-wrapper">
                     <input type="text" id="searchInput" placeholder="Buscar por nombre, correo, rol, grado o sección..." 
                         class="search-input">
@@ -569,10 +585,10 @@ try {
                                 data-rol="<?= htmlspecialchars($usuario['rol']) ?>"
                                 data-detalles="<?= htmlspecialchars(
                                     ($usuario['rol'] === 'Estudiante') ? 
-                                        ($usuario['estudiante_grado'] . '-' . $usuario['estudiante_seccion']) : 
+                                        ($usuario['estudiante_grado'] . ' ' . $usuario['estudiante_seccion']) : 
                                     (($usuario['rol'] === 'Docente') ?
-                                        ($usuario['docente_grado'] . '-' . $usuario['docente_seccion']) :
-                                        ($usuario['estudiantes_asignados'] ?? '')
+                                        ($usuario['docente_grado'] . ' ' . $usuario['docente_seccion']) :
+                                        (is_string($usuario['estudiantes_asignados']) ? strip_tags($usuario['estudiantes_asignados']) : '')
                                     )
                                 ) ?>">
                                 
@@ -635,8 +651,7 @@ try {
                                             <img src="../../../assets/basurero_borrar.svg" alt="Eliminar" style="width:16px; height:16px;">
                                         </button>
                                         <button class="btn-action btn-access" 
-                                                data-password="<?= htmlspecialchars($usuario['contrasena_temporal'] ?? '—') ?>"
-                                                data-user="<?= htmlspecialchars($usuario['nombre']) ?>"
+                                                onclick="mostrarPassword(<?= $usuario['id'] ?>, '<?= addslashes($usuario['contrasena_temporal'] ?? '—') ?>', '<?= addslashes($usuario['nombre']) ?>')"
                                                 title="Ver contraseña temporal">
                                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                                 <path d="M8 1a2 2 0 0 1 2 2v2H6V3a2 2 0 0 1 2-2zm3 6V5a3 3 0 0 0-6 0v2a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
@@ -670,6 +685,28 @@ try {
             </form>
         </div>
     </div>
+    <!-- Modal para mostrar contraseña -->
+    <div class="modal" id="modalPassword">
+        <div class="modal-content" style="max-width: 450px;">
+            <h3 style="color: var(--primary-purple);">🔐 Contraseña Temporal</h3>
+            
+            <div style="margin: 20px 0; padding: 20px; background: #f0f0f0; border-radius: 8px; border: 2px solid var(--primary-purple);">
+                <p id="passwordUserName" style="font-weight: 600; margin-bottom: 10px;"></p>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="passwordText" readonly 
+                        style="flex: 1; padding: 12px; font-family: monospace; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; background: white;"
+                        value="">
+                    <button class="btn-primary" onclick="copiarPasswordDesdeInput()" style="background-color: var(--primary-purple); white-space: nowrap;">
+                        📋 Copiar
+                    </button>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button type="button" class="modal-btn-cancel" onclick="cerrarModalPassword()">Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Pie de página -->
     <footer class="footer">
@@ -679,139 +716,127 @@ try {
 
     <script>
 
-        // Toggle menú hamburguesa
-        document.getElementById('menu-toggle').addEventListener('click', function() {
-            const dropdown = document.getElementById('dropdown');
-            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-        });
-
-        // Cerrar menú al hacer clic fuera
-        document.addEventListener('click', function(e) {
-            const dropdown = document.getElementById('dropdown');
-            const toggle = document.getElementById('menu-toggle');
-            if (!toggle.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.style.display = 'none';
+        // Esperar a que el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // Toggle menú hamburguesa
+            const menuToggle = document.getElementById('menu-toggle');
+            if (menuToggle) {
+                menuToggle.addEventListener('click', function() {
+                    const dropdown = document.getElementById('dropdown');
+                    if (dropdown) {
+                        dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+                    }
+                });
             }
-        });
 
-        // Buscador en tiempo real
-        document.getElementById('searchInput').addEventListener('input', function() {
-            const filter = this.value.toLowerCase();
-            const rows = document.querySelectorAll('#usuariosTableBody tr');
-            
-            rows.forEach(row => {
-                const nombre = row.getAttribute('data-nombre') || '';
-                const correo = row.getAttribute('data-correo') || '';
-                const rol = row.getAttribute('data-rol') || '';
-                const detalles = row.getAttribute('data-detalles') || '';
+            // Buscador en tiempo real
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                console.log('✅ Buscador inicializado');
                 
-                const matches = 
-                    nombre.toLowerCase().includes(filter) ||
-                    correo.toLowerCase().includes(filter) ||
-                    rol.toLowerCase().includes(filter) ||
-                    detalles.toLowerCase().includes(filter);
-                
-                row.style.display = matches ? '' : 'none';
-            });
-        });
-
-        // POPUP DE CONTRASEÑA - VERSIÓN SIMPLIFICADA
-        let currentPassPopup = null;
-
-        // Configurar todos los botones .btn-access
-        document.querySelectorAll('.btn-access').forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Cerrar popup anterior si existe
-                if (currentPassPopup) {
-                    currentPassPopup.remove();
-                    currentPassPopup = null;
-                    return;
-                }
-
-                const password = this.getAttribute('data-password') || '';
-                const user = this.getAttribute('data-user') || 'Usuario';
-                
-                // Verificar si hay contraseña
-                if (!password || password === '—') {
-                    alert('❌ Este usuario no tiene contraseña temporal');
-                    return;
-                }
-                
-                // Obtener posición del botón
-                const rect = this.getBoundingClientRect();
-                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-                
-                // Crear popup
-                const popup = document.createElement('div');
-                popup.className = 'password-popup';
-                popup.innerHTML = `
-                    <div style="font-size:13px; color:#666; margin-bottom:8px;">
-                        <strong>${user}</strong>
-                    </div>
-                    <div style="
-                        background: #f0f0f0;
-                        padding: 12px;
-                        border-radius: 6px;
-                        font-family: monospace;
-                        font-size: 16px;
-                        font-weight: bold;
-                        color: #333;
-                        border: 2px solid var(--primary-purple);
-                        word-break: break-all;
-                    ">${password}</div>
-                    <div style="font-size:11px; color:#999; margin-top:8px;">
-                        Click fuera para cerrar
-                    </div>
-                `;
-                
-                // Posicionar el popup (encima del botón)
-                popup.style.position = 'absolute';
-                popup.style.top = (rect.top + scrollTop - popup.offsetHeight - 10) + 'px';
-                popup.style.left = (rect.left + scrollLeft - 100 + (rect.width/2)) + 'px';
-                popup.style.zIndex = '10000';
-                popup.style.minWidth = '200px';
-                
-                // Ajustar si se sale de la pantalla
-                setTimeout(() => {
-                    const popupRect = popup.getBoundingClientRect();
-                    if (popupRect.top < 10) {
-                        popup.style.top = (rect.bottom + scrollTop + 10) + 'px';
-                    }
-                    if (popupRect.left < 10) {
-                        popup.style.left = '10px';
-                    }
-                    if (popupRect.right > window.innerWidth - 10) {
-                        popup.style.left = (window.innerWidth - popupRect.width - 20) + 'px';
-                    }
-                }, 10);
-                
-                document.body.appendChild(popup);
-                currentPassPopup = popup;
-                
-                // Cerrar al hacer clic fuera
-                setTimeout(() => {
-                    document.addEventListener('click', function cerrar(e) {
-                        if (!popup.contains(e.target) && e.target !== button) {
-                            popup.remove();
-                            currentPassPopup = null;
-                            document.removeEventListener('click', cerrar);
-                        }
+                searchInput.addEventListener('input', function() {
+                    const filter = this.value.toLowerCase().trim();
+                    const rows = document.querySelectorAll('#usuariosTableBody tr');
+                    
+                    rows.forEach(row => {
+                        // Ignorar la fila de "No hay usuarios"
+                        if (row.cells.length === 1 && row.cells[0].colSpan === 6) return;
+                        
+                        const textoCompleto = row.textContent.toLowerCase();
+                        row.style.display = textoCompleto.includes(filter) ? '' : 'none';
                     });
-                }, 100);
+                });
+            } else {
+                console.error('❌ No se encontró el elemento searchInput');
+            }
+
+            // Cerrar menú al hacer clic fuera
+            document.addEventListener('click', function(e) {
+                const dropdown = document.getElementById('dropdown');
+                const toggle = document.getElementById('menu-toggle');
+                if (dropdown && toggle && !toggle.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
             });
-            
-            // Quitar outline al hacer focus
-            button.addEventListener('focus', function() {
-                this.style.outline = 'none';
-            });
+
         });
+
+        // Función para mostrar modal de contraseña
+        function mostrarPassword(id, password, user) {
+            console.log('mostrarPassword llamado', id, password, user); // Para depurar
+            
+            if (!password || password === '—' || password === '') {
+                alert('❌ Este usuario no tiene contraseña temporal');
+                return false;
+            }
+            
+            // Asignar valores
+            document.getElementById('passwordUserName').innerHTML = '<strong>Usuario:</strong> ' + user;
+            document.getElementById('passwordText').value = password;
+            
+            // Mostrar modal
+            document.getElementById('modalPassword').style.display = 'flex';
+            
+            return true;
+        }
+
+        // Función para cerrar modal de contraseña
+        function cerrarModalPassword() {
+            document.getElementById('modalPassword').style.display = 'none';
+        }
+
+        // Función para copiar contraseña
+        function copiarPasswordDesdeInput() {
+            var input = document.getElementById('passwordText');
+            
+            if (!input || !input.value) {
+                alert('❌ No hay contraseña para copiar');
+                return;
+            }
+            
+            // Seleccionar el texto
+            input.select();
+            input.setSelectionRange(0, 99999);
+            
+            // Intentar copiar
+            try {
+                if (document.execCommand('copy')) {
+                    alert('✅ Contraseña copiada al portapapeles');
+                } else {
+                    alert('❌ No se pudo copiar. Selecciona la contraseña manualmente (Ctrl+C)');
+                }
+            } catch (err) {
+                alert('❌ Error al copiar. Selecciona la contraseña manualmente (Ctrl+C)');
+            }
+        }
+        // Funciones para el modal de eliminación
+        function confirmarEliminar(id, nombre) {
+            document.getElementById('usuario_id_eliminar').value = id;
+            document.getElementById('modal-mensaje').innerHTML = `¿Estás seguro de que deseas eliminar al usuario <strong>"${nombre}"</strong>?`;
+            document.getElementById('modalEliminar').style.display = 'flex';
+        }
+
+        function cerrarModal() {
+            document.getElementById('modalEliminar').style.display = 'none';
+        }
+
+        // Cerrar modales si se hace clic fuera
+        window.onclick = function(event) {
+            const modalEliminar = document.getElementById('modalEliminar');
+            const modalPassword = document.getElementById('modalPassword');
+            
+            if (event.target === modalEliminar) {
+                modalEliminar.style.display = 'none';
+            }
+            if (event.target === modalPassword) {
+                modalPassword.style.display = 'none';
+                currentUserId = null;
+            }
+        }
 
 
     </script>
->
+
 </body>
 </html>

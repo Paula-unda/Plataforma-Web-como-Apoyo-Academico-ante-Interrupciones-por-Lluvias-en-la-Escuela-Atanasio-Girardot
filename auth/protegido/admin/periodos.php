@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -145,9 +146,10 @@ $_SESSION['mensajes'] = [];
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Gestión de Períodos - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -177,18 +179,24 @@ $_SESSION['mensajes'] = [];
             flex-direction: column;
         }
 
-        /* Encabezado */
+        /* Header responsive */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 24px;
+            padding: 0 16px;
             height: 60px;
             background-color: var(--surface);
             border-bottom: 1px solid var(--border);
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             position: relative;
             z-index: 100;
+        }
+
+        @media (min-width: 768px) {
+            .header {
+                padding: 0 24px;
+            }
         }
 
         .header-left {
@@ -198,13 +206,19 @@ $_SESSION['mensajes'] = [];
         }
 
         .logo {
-            height: 40px;
+            height: 32px;
+        }
+
+        @media (min-width: 768px) {
+            .logo {
+                height: 40px;
+            }
         }
 
         .header-right {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
         }
 
         .icon-btn {
@@ -217,6 +231,7 @@ $_SESSION['mensajes'] = [];
             justify-content: center;
             cursor: pointer;
             transition: background 0.2s;
+            flex-shrink: 0;
         }
 
         .icon-btn:hover {
@@ -232,7 +247,7 @@ $_SESSION['mensajes'] = [];
         .menu-dropdown {
             position: absolute;
             top: 60px;
-            right: 24px;
+            right: 16px;
             background: white;
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -242,8 +257,14 @@ $_SESSION['mensajes'] = [];
             z-index: 1000;
         }
 
+        @media (min-width: 768px) {
+            .menu-dropdown {
+                right: 24px;
+            }
+        }
+
         .menu-item {
-            padding: 10px 16px;
+            padding: 12px 16px;
             font-size: 14px;
             color: var(--text-dark);
             text-decoration: none;
@@ -255,18 +276,24 @@ $_SESSION['mensajes'] = [];
             background-color: #F8F8F8;
         }
 
-        /* Banner superior */
+        /* Banner responsive */
         .banner {
             position: relative;
-            height: 100px; 
+            height: 80px;
             overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .banner {
+                height: 100px;
+            }
         }
 
         .banner-image {
             width: 100%;
             height: 100%;
-            object-fit: cover; 
-            object-position: top; 
+            object-fit: cover;
+            object-position: top;
         }
 
         .banner-content {
@@ -274,58 +301,92 @@ $_SESSION['mensajes'] = [];
             position: relative;
             z-index: 2;
             max-width: 800px;
-            padding: 20px;
+            padding: 16px;
             margin: 0 auto;
         }
 
         .banner-title {
-            font-size: 36px;
+            font-size: 28px;
             font-weight: 700;
             color: var(--text-dark);
             margin-bottom: 8px;
         }
 
+        @media (min-width: 768px) {
+            .banner-title {
+                font-size: 36px;
+            }
+        }
+
         /* Contenido principal */
         .main-content {
             flex: 1;
-            padding: 40px 20px;
+            padding: 20px 16px;
             max-width: 1400px;
             margin: 0 auto;
             width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 40px 20px;
+            }
         }
 
         /* Tarjetas */
         .card {
             background: white;
             border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 30px;
+            padding: 20px;
+            margin-bottom: 20px;
             box-shadow: 0 6px 16px rgba(0,0,0,0.1);
             border: 1px solid var(--border);
         }
 
+        @media (min-width: 768px) {
+            .card {
+                padding: 24px;
+                margin-bottom: 30px;
+            }
+        }
+
         .card-header {
             background-color: var(--primary-cyan);
-            margin: -24px -24px 20px -24px;
-            padding: 20px;
+            margin: -20px -20px 16px -20px;
+            padding: 16px 20px;
             border-radius: 16px 16px 0 0;
             color: white;
+        }
+
+        @media (min-width: 768px) {
+            .card-header {
+                margin: -24px -24px 20px -24px;
+                padding: 20px 24px;
+            }
         }
 
         .card-header h2 {
             color: white;
             font-weight: 600;
+            font-size: 1.2rem;
         }
 
         /* Grid para formulario */
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        @media (min-width: 768px) {
+            .form-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+            }
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         label {
@@ -333,6 +394,7 @@ $_SESSION['mensajes'] = [];
             margin-bottom: 5px;
             font-weight: 600;
             color: #555;
+            font-size: 14px;
         }
 
         input, select {
@@ -354,12 +416,22 @@ $_SESSION['mensajes'] = [];
         .btn-primary {
             background-color: var(--primary-cyan);
             color: white;
-            padding: 12px 30px;
+            padding: 12px 20px;
             border: none;
             border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.3s, opacity 0.3s;
+            width: 100%;
+            font-size: 15px;
+        }
+
+        @media (min-width: 768px) {
+            .btn-primary {
+                width: auto;
+                padding: 12px 30px;
+                font-size: 14px;
+            }
         }
 
         .btn-primary:hover {
@@ -367,33 +439,24 @@ $_SESSION['mensajes'] = [];
             opacity: 0.9;
         }
 
-        .btn-secondary {
-            background-color: var(--primary-pink);
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.3s;
-        }
-
-        .btn-secondary:hover {
-            transform: translateY(-2px);
-        }
-
-        /* Contenedor de acciones - SEPARACIÓN ENTRE BOTONES */
+        /* Contenedor de acciones responsive */
         .acciones-container {
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            align-items: center;
+            flex-direction: column;
+            gap: 6px;
+            align-items: stretch;
         }
 
-        .btn-edit {
-            background-color: var(--primary-lime);
-            color: #333;
-            padding: 6px 12px;
+        @media (min-width: 768px) {
+            .acciones-container {
+                flex-direction: row;
+                gap: 8px;
+                align-items: center;
+            }
+        }
+
+        .btn-edit, .btn-delete, .btn-toggle {
+            padding: 8px 12px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -401,55 +464,65 @@ $_SESSION['mensajes'] = [];
             font-weight: 600;
             text-decoration: none;
             display: inline-block;
-            white-space: nowrap;
+            text-align: center;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .btn-edit, .btn-delete, .btn-toggle {
+                width: auto;
+                white-space: nowrap;
+            }
+        }
+
+        .btn-edit {
+            background-color: var(--primary-lime);
+            color: #333;
         }
 
         .btn-delete {
             background-color: var(--primary-pink);
             color: white;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
         }
 
         .btn-toggle {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            white-space: nowrap;
+            background-color: #f8d7da;
+            color: #721c24;
         }
 
         /* Mensajes */
+        .mensaje-exito, .mensaje-error {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
         .mensaje-exito {
             background-color: var(--primary-lime);
             color: #333;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
             border: 1px solid #b1c94a;
         }
 
         .mensaje-error {
             background-color: #f8d7da;
             color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
             border: 1px solid #f5c6cb;
         }
 
-        /* Tabla */
+        /* Tabla responsive */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 0 -20px;
+            padding: 0 20px;
+        }
+
         table {
             width: 100%;
+            min-width: 900px;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 15px;
         }
 
         th {
@@ -458,11 +531,13 @@ $_SESSION['mensajes'] = [];
             padding: 12px;
             text-align: left;
             font-weight: 600;
+            font-size: 13px;
         }
 
         td {
             padding: 12px;
             border-bottom: 1px solid var(--border);
+            font-size: 13px;
         }
 
         tr:hover {
@@ -473,8 +548,9 @@ $_SESSION['mensajes'] = [];
         .badge {
             padding: 4px 8px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
+            white-space: nowrap;
         }
 
         .badge-activo {
@@ -498,27 +574,38 @@ $_SESSION['mensajes'] = [];
         .info-box h3 {
             color: var(--primary-purple);
             margin-bottom: 10px;
+            font-size: 18px;
         }
 
         .info-box ul {
             margin-left: 20px;
             line-height: 1.8;
+            font-size: 14px;
         }
 
         /* Enlace volver */
         .back-link {
-            float: right;
+            display: block;
+            text-align: center;
             color: var(--primary-pink);
             text-decoration: none;
             font-weight: 500;
-            margin-left: 20px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        @media (min-width: 768px) {
+            .back-link {
+                float: right;
+                margin-top: 0;
+            }
         }
 
         .back-link:hover {
             text-decoration: underline;
         }
 
-        /* Modal */
+        /* Modal responsive */
         .modal {
             display: none;
             position: fixed;
@@ -530,39 +617,58 @@ $_SESSION['mensajes'] = [];
             z-index: 2000;
             justify-content: center;
             align-items: center;
+            padding: 16px;
         }
 
         .modal-content {
             background: white;
-            padding: 30px;
+            padding: 24px;
             border-radius: 16px;
             max-width: 400px;
+            width: 100%;
             text-align: center;
         }
 
         .modal-buttons {
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 8px;
             justify-content: center;
             margin-top: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .modal-buttons {
+                flex-direction: row;
+            }
         }
 
         .modal-btn-confirm {
             background-color: var(--primary-pink);
             color: white;
-            padding: 10px 20px;
+            padding: 12px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-weight: 600;
+            width: 100%;
         }
 
         .modal-btn-cancel {
             background-color: #ccc;
             color: #333;
-            padding: 10px 20px;
+            padding: 12px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .modal-btn-confirm, .modal-btn-cancel {
+                width: auto;
+            }
         }
 
         /* Footer */
@@ -573,62 +679,24 @@ $_SESSION['mensajes'] = [];
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 24px;
-            font-size: 13px;
+            padding: 0 16px;
+            font-size: 12px;
             color: var(--text-muted);
             position: sticky;
             bottom: 0;
-            left: 0;
-            right: 0;
         }
 
-        @media (max-width: 768px) {
-            .banner-title {
-                font-size: 28px;
-            }
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-            table {
-                font-size: 14px;
-            }
-            th, td {
-                padding: 8px;
-            }
-            .acciones-container {
-                flex-direction: column;
-                align-items: flex-start;
+        @media (min-width: 768px) {
+            .footer {
+                padding: 0 24px;
+                font-size: 13px;
             }
         }
     </style>
 </head>
 <body>
 
-    <!-- Encabezado -->
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo" onerror="this.src='https://via.placeholder.com/120x40?text=SIEDUCRES'">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn" onclick="window.location.href='../comun/notificaciones.php'">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones" onerror="this.src='https://via.placeholder.com/20x20?text=🔔'">
-            </div>
-            <div class="icon-btn" onclick="window.location.href='perfil.php'">
-                <img src="../../../assets/icon-user.svg" alt="Perfil" onerror="this.src='https://via.placeholder.com/20x20?text=👤'">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="../comun/notificaciones.php" class="menu-item">Notificaciones</a>
-                <a href="perfil.php" class="menu-item">Mi Perfil</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <!-- Banner -->
     <div class="banner">
@@ -639,6 +707,7 @@ $_SESSION['mensajes'] = [];
     <div class="banner-content">
         <h1 class="banner-title">📅 Gestión de Períodos Escolares</h1>
     </div>
+    
 
     <!-- Contenido principal -->
     <main class="main-content">
@@ -711,59 +780,55 @@ $_SESSION['mensajes'] = [];
                 <h2>📋 Períodos Existentes</h2>
             </div>
             
-            <table>
-                <thead>
-                    <tr>
-                        <th>Nombre</th>
-                        <th>Lapso</th>
-                        <th>Año Escolar</th>
-                        <th>Fecha Inicio</th>
-                        <th>Fecha Fin</th>
-                        <th>Estado</th>
-                        <th>Historiales</th>
-                        <th>Creado por</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($periodos as $p): ?>
-                    <tr>
-                        <td><strong><?php echo htmlspecialchars($p['nombre']); ?></strong></td>
-                        <td><?php echo $p['lapso']; ?>°</td>
-                        <td><?php echo $p['año_escolar']; ?></td>
-                        <td><?php echo date('d/m/Y', strtotime($p['fecha_inicio'])); ?></td>
-                        <td><?php echo date('d/m/Y', strtotime($p['fecha_fin'])); ?></td>
-                        <td>
-                            <span class="badge <?php echo $p['activo'] ? 'badge-activo' : 'badge-inactivo'; ?>">
-                                <?php echo $p['activo'] ? 'Activo' : 'Inactivo'; ?>
-                            </span>
-                        </td>
-                        <td><?php echo $p['total_historiales']; ?> estudiantes</td>
-                        <td><?php echo $p['creador'] ?? 'Sistema'; ?></td>
-                        <td>
-                            <!-- CONTENEDOR CON FLEX Y GAP PARA SEPARAR BOTONES -->
-                            <div class="acciones-container">
-                                <!-- Botón Editar -->
-                                <a href="?editar=<?php echo $p['id']; ?>" class="btn-edit">✏️ Editar</a>
-                                
-                                <!-- Botón Eliminar -->
-                                <button class="btn-delete" onclick="confirmarEliminar(<?php echo $p['id']; ?>, '<?php echo htmlspecialchars($p['nombre']); ?>')">🗑️ Eliminar</button>
-                                
-                                <!-- Botón Activar/Desactivar -->
-                                <form method="POST" style="display: inline; margin: 0;">
-                                    <input type="hidden" name="accion" value="toggle">
-                                    <input type="hidden" name="periodo_id" value="<?php echo $p['id']; ?>">
-                                    <input type="hidden" name="activo" value="<?php echo $p['activo'] ? 0 : 1; ?>">
-                                    <button type="submit" class="btn-toggle" style="background: <?php echo $p['activo'] ? '#f8d7da' : '#d4edda'; ?>">
-                                        <?php echo $p['activo'] ? 'Desactivar' : 'Activar'; ?>
-                                    </button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Lapso</th>
+                            <th>Año Escolar</th>
+                            <th>Fecha Inicio</th>
+                            <th>Fecha Fin</th>
+                            <th>Estado</th>
+                            <th>Historiales</th>
+                            <th>Creado por</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($periodos as $p): ?>
+                        <tr>
+                            <td><strong><?php echo htmlspecialchars($p['nombre']); ?></strong></td>
+                            <td><?php echo $p['lapso']; ?>°</td>
+                            <td><?php echo $p['año_escolar']; ?></td>
+                            <td><?php echo date('d/m/Y', strtotime($p['fecha_inicio'])); ?></td>
+                            <td><?php echo date('d/m/Y', strtotime($p['fecha_fin'])); ?></td>
+                            <td>
+                                <span class="badge <?php echo $p['activo'] ? 'badge-activo' : 'badge-inactivo'; ?>">
+                                    <?php echo $p['activo'] ? 'Activo' : 'Inactivo'; ?>
+                                </span>
+                            </td>
+                            <td><?php echo $p['total_historiales']; ?></td>
+                            <td><?php echo $p['creador'] ?? 'Sistema'; ?></td>
+                            <td>
+                                <div class="acciones-container">
+                                    <a href="?editar=<?php echo $p['id']; ?>" class="btn-edit">✏️ Editar</a>
+                                    <button class="btn-delete" onclick="confirmarEliminar(<?php echo $p['id']; ?>, '<?php echo htmlspecialchars($p['nombre']); ?>')">🗑️ Eliminar</button>
+                                    <form method="POST" style="width: 100%;">
+                                        <input type="hidden" name="accion" value="toggle">
+                                        <input type="hidden" name="periodo_id" value="<?php echo $p['id']; ?>">
+                                        <input type="hidden" name="activo" value="<?php echo $p['activo'] ? 0 : 1; ?>">
+                                        <button type="submit" class="btn-toggle" style="background: <?php echo $p['activo'] ? '#f8d7da' : '#d4edda'; ?>">
+                                            <?php echo $p['activo'] ? 'Desactivar' : 'Activar'; ?>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Información importante -->

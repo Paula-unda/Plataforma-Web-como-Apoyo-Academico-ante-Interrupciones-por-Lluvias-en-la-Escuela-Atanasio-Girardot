@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 // Verificar que sea docente
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
@@ -59,33 +60,40 @@ try {
     $stats->execute([$contenido['grado'], $contenido['seccion'], $contenido_id]);
     $estadisticas = $stats->fetch(PDO::FETCH_ASSOC);
     
-    // Lista de estudiantes con su progreso
+    // Lista de estudiantes con su progreso (SIN DUPLICADOS - Versión con GROUP BY)
     $estudiantes = $conexion->prepare("
         SELECT 
             u.id,
             u.nombre,
             u.correo,
-            COALESCE(p.porcentaje_visto, 0) as progreso,
+            COALESCE(p.porcentaje_total, 0) as progreso,
             CASE 
-                WHEN p.porcentaje_visto >= 100 THEN 'Completado'
-                WHEN p.porcentaje_visto > 0 THEN 'En progreso'
+                WHEN COALESCE(p.porcentaje_total, 0) >= 100 THEN 'Completado'
+                WHEN COALESCE(p.porcentaje_total, 0) > 0 THEN 'En progreso'
                 ELSE 'Sin iniciar'
             END as estado,
-            p.ultima_visualizacion,
-            p.completado
+            p.ultima_actividad as ultima_visualizacion
         FROM usuarios u
         INNER JOIN estudiantes e ON u.id = e.usuario_id
-        LEFT JOIN progreso_contenido p ON u.id = p.estudiante_id AND p.contenido_id = ?
+        LEFT JOIN (
+            SELECT 
+                estudiante_id,
+                MAX(porcentaje_visto) as porcentaje_total,
+                MAX(ultima_visualizacion) as ultima_actividad
+            FROM progreso_contenido 
+            WHERE contenido_id = ? AND material_id IS NULL
+            GROUP BY estudiante_id
+        ) p ON u.id = p.estudiante_id
         WHERE u.rol = 'Estudiante' 
             AND e.grado = ? 
             AND e.seccion = ?
         ORDER BY 
             CASE 
-                WHEN p.porcentaje_visto >= 100 THEN 1
-                WHEN p.porcentaje_visto > 0 THEN 2
+                WHEN COALESCE(p.porcentaje_total, 0) >= 100 THEN 1
+                WHEN COALESCE(p.porcentaje_total, 0) > 0 THEN 2
                 ELSE 3
             END,
-            p.porcentaje_visto DESC,
+            p.porcentaje_total DESC,
             u.nombre ASC
     ");
     $estudiantes->execute([$contenido_id, $contenido['grado'], $contenido['seccion']]);
@@ -114,6 +122,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estadísticas - <?php echo htmlspecialchars($contenido['titulo']); ?></title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -435,6 +444,9 @@ try {
             font-weight: 600;
             transition: all 0.2s;
         }
+        body {
+            padding-top: 60px;  /* ← ALTURA DEL HEADER */
+        }
         
         .btn-volver:hover {
             background: #f0f0f0;
@@ -460,29 +472,7 @@ try {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="gestion_contenidos.php" class="menu-item">Gestión de Contenidos</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -31,7 +32,8 @@ $actividades = array_filter($actividades, function($act) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Actividades - SIEDUCRES</title>
-    
+    <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -86,6 +88,12 @@ $actividades = array_filter($actividades, function($act) {
         .no-actividades-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.3; }
         .no-actividades-title { font-size: 24px; font-weight: 600; margin-bottom: 12px; color: var(--text-muted); }
         .no-actividades-desc { font-size: 16px; color: var(--text-muted); line-height: 1.6; }
+        /* Enlace volver */
+        .back-link {
+            display: block;
+            color: #EF5E8E;
+            text-decoration: none;
+        }
 
         @media (max-width: 768px) {
             .banner-title { font-size: 28px; }
@@ -96,27 +104,7 @@ $actividades = array_filter($actividades, function($act) {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner SIEDUCRES" class="banner-image">
@@ -124,6 +112,12 @@ $actividades = array_filter($actividades, function($act) {
     <div class="banner-content">
         <h1 class="banner-title">Actividades</h1>
     </div>
+    <!-- 🔴 FLECHA DE VOLVER A LA IZQUIERDA -->
+    <?php if (basename($_SERVER['PHP_SELF']) != 'index.php'): ?>
+        <div style="max-width: 1200px; margin: 10px 0 10px 40px; padding: 0; width: 100%;">
+            <a href="index.php" class="back-link">← Volver al Panel</a>
+        </div>
+    <?php endif; ?>
 
     <main class="main-content">
         <?php if (count($actividades) > 0): ?>

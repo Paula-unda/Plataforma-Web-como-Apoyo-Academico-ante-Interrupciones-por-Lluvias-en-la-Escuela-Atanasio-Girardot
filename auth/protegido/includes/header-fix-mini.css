@@ -1,0 +1,94 @@
+/* ========================================
+   HEADER FIJO - SOLUCIÓN UNIVERSAL
+   ======================================== */
+
+/* Ajuste global para el header fijo */
+body {
+    padding-top: 60px; /* Mismo alto que el header */
+    margin: 0;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+/* Asegurar que el header siempre esté arriba */
+.header-global {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    z-index: 1000;
+    background-color: var(--surface, #FFFFFF);
+    border-bottom: 1px solid var(--border, #E0E0E0);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Clase para elementos que necesitan compensación adicional */
+.contenido-principal {
+    margin-top: 20px; /* Espacio extra si es necesario */
+}
+
+/* Ajuste para el banner que está justo debajo del header */
+.banner {
+    margin-top: 0; /* Ya tenemos padding-top en body */
+    position: relative;
+    z-index: 1;
+}
+
+/* Ajuste para páginas con split-pane (como el foro) */
+.foro-container,
+.split-pane,
+.contenedor-dividido {
+    height: calc(100vh - 140px); /* 60px header + 80px banner */
+    margin-top: 0;
+}
+
+/* Ajuste para móviles */
+@media (max-width: 768px) {
+    body {
+        padding-top: 60px;
+    }
+    
+    /* Ajustar alturas en móvil */
+    .foro-container,
+    .split-pane,
+    .contenedor-dividido {
+        height: auto;
+        min-height: calc(100vh - 140px);
+    }
+    
+    /* Corrección para elementos fijos en móvil */
+    .header-global {
+        height: 60px;
+    }
+}
+
+/* Utilidad para depuración - muestra el área del header */
+.debug-header-space {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(255,0,0,0.1);
+    pointer-events: none;
+    z-index: 9999;
+    display: none; /* Activar solo para depuración */
+}
+
+/* Clase para páginas que NO necesitan padding-top (login, etc) */
+body.no-header-fix {
+    padding-top: 0;
+}
+
+/* Ajuste para títulos y elementos que puedan quedar tapados */
+h1:first-of-type,
+.titulo-principal:first-of-type {
+    margin-top: 0; /* Ya tenemos padding-top en body */
+}
+
+/* Ajuste para el primer elemento después del header */
+main:first-of-type,
+.contenido:first-of-type {
+    margin-top: 0;
+}

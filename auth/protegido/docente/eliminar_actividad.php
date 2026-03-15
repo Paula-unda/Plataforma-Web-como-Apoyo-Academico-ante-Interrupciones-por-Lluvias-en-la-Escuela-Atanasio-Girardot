@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 // Verificar que sea docente
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Docente') {
@@ -107,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmar'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eliminar Actividad - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -362,6 +364,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmar'])) {
             color: var(--text-muted);
             margin-top: auto;
         }
+        body {
+            padding-top: 60px;  /* ← ALTURA DEL HEADER */
+        }
         
         @media (max-width: 768px) {
             .banner-title { font-size: 28px; }
@@ -372,30 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirmar'])) {
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="index.php" class="menu-item">Panel Principal</a>
-                <a href="gestion_actividades.php" class="menu-item">Gestión de Actividades</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
-
+    <?php require_once '../includes/header_comun.php'; ?>
     <div class="banner">
         <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
     </div>

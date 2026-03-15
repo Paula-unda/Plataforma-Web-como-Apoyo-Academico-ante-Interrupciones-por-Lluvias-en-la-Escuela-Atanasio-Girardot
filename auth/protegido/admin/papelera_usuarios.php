@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -41,20 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion'])) {
             }
             
             // Restaurar usuario principal
-            // Restaurar usuario principal
             $stmt_restore = $conexion->prepare("
-                INSERT INTO usuarios (id, nombre, correo, contrasena, contrasena_temporal, rol, telefono, activo, creado_en)
-                VALUES (?, ?, ?, ?, ?, ?, ?, true, CURRENT_TIMESTAMP)
+                INSERT INTO usuarios (id, nombre, correo, contrasena, contrasena_temporal, rol, activo, creado_en)
+                VALUES (?, ?, ?, ?, ?, ?, true, CURRENT_TIMESTAMP)
                 ON CONFLICT (id) DO UPDATE SET
                     nombre = EXCLUDED.nombre,
                     correo = EXCLUDED.correo,
                     contrasena = EXCLUDED.contrasena,
                     contrasena_temporal = EXCLUDED.contrasena_temporal,
                     rol = EXCLUDED.rol,
-                    telefono = EXCLUDED.telefono,
                     activo = true
             ");
-
             $stmt_restore->execute([
                 $eliminado['usuario_id'],
                 $eliminado['nombre'],
@@ -62,9 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion'])) {
                 $eliminado['contrasena'],
                 $eliminado['contrasena_temporal'],
                 $eliminado['rol'],
-                $eliminado['telefono']
-                // 👇 ELIMINADO: el parámetro extra que causaba el error
             ]);
+            
             // Restaurar según rol
             if ($eliminado['rol'] === 'Estudiante' && $eliminado['grado']) {
                 $stmt_est = $conexion->prepare("
@@ -79,51 +76,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion'])) {
             
             if ($eliminado['rol'] === 'Docente' && $eliminado['grado']) {
                 $stmt_doc = $conexion->prepare("
-                    INSERT INTO docentes (usuario_id, grado, seccion, especialidad)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO docentes (usuario_id, grado, seccion)
+                    VALUES (?, ?, ?)
                     ON CONFLICT (usuario_id) DO UPDATE SET
                         grado = EXCLUDED.grado,
-                        seccion = EXCLUDED.seccion,
-                        especialidad = EXCLUDED.especialidad
+                        seccion = EXCLUDED.seccion
                 ");
                 $stmt_doc->execute([
                     $eliminado['usuario_id'], 
                     $eliminado['grado'], 
-                    $eliminado['seccion'],
-                    $eliminado['especialidad']
+                    $eliminado['seccion']
                 ]);
             }
             
             if ($eliminado['rol'] === 'Representante') {
-                $stmt_rep = $conexion->prepare("
-                    INSERT INTO representantes (usuario_id, profesion, telefono_trabajo, direccion)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT (usuario_id) DO UPDATE SET
-                        profesion = EXCLUDED.profesion,
-                        telefono_trabajo = EXCLUDED.telefono_trabajo,
-                        direccion = EXCLUDED.direccion
-                ");
-                $stmt_rep->execute([
-                    $eliminado['usuario_id'],
-                    $eliminado['profesion'],
-                    $eliminado['telefono_trabajo'],
-                    $eliminado['direccion']
-                ]);
-                
-                // Restaurar relaciones con estudiantes
+                // Solo restaurar relaciones con estudiantes (la tabla representantes NO existe)
                 if ($eliminado['estudiantes_asignados']) {
                     $estudiantes = json_decode($eliminado['estudiantes_asignados'], true);
-                    foreach ($estudiantes as $est) {
-                        $stmt_rel = $conexion->prepare("
-                            INSERT INTO representantes_estudiantes (representante_id, estudiante_id, parentesco)
-                            VALUES (?, ?, ?)
-                            ON CONFLICT DO NOTHING
-                        ");
-                        $stmt_rel->execute([
-                            $eliminado['usuario_id'],
-                            $est['id'],
-                            $est['parentesco'] ?? null
-                        ]);
+                    if (is_array($estudiantes)) {
+                        foreach ($estudiantes as $est) {
+                            // Verificar que el estudiante existe antes de asignarlo
+                            $check_est = $conexion->prepare("SELECT id FROM usuarios WHERE id = ?");
+                            $check_est->execute([$est['id']]);
+                            if ($check_est->fetch()) {
+                                $stmt_rel = $conexion->prepare("
+                                    INSERT INTO representantes_estudiantes (representante_id, estudiante_id)
+                                    VALUES (?, ?)
+                                    ON CONFLICT DO NOTHING
+                                ");
+                                $stmt_rel->execute([
+                                    $eliminado['usuario_id'],
+                                    $est['id']
+                                ]);
+                            }
+                        }
                     }
                 }
             }
@@ -191,270 +177,505 @@ $eliminados = $conexion->query("
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Papelera de Usuarios - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            :root {
-                --primary-cyan: #4BC4E7;
-                --primary-pink: #EF5E8E;
-                --primary-lime: #c3d54dff;
-                --primary-purple: #9B8AFB;
-                --white: #FFFFFF;
-                --canvas-bg: #F5F5F5;
-                --text-main: #000000;
-                --text-muted: #666666;
-                --border-dark: #000000;
-                --border-light: #CCCCCC;
-            }
-            body {
-                font-family: 'Inter', sans-serif;
-                background-color: var(--canvas-bg);
-                color: var(--text-main);
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-            }
-            
-            /* HEADER CORREGIDO - Iconos del tamaño correcto */
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-cyan: #4BC4E7;
+            --primary-pink: #EF5E8E;
+            --primary-lime: #c3d54dff;
+            --primary-purple: #9B8AFB;
+            --white: #FFFFFF;
+            --canvas-bg: #F5F5F5;
+            --text-main: #000000;
+            --text-muted: #666666;
+            --border-dark: #000000;
+            --border-light: #CCCCCC;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--canvas-bg);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header responsive */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            height: 60px;
+            background-color: var(--white);
+            border-bottom: 1px solid var(--border-light);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 100;
+        }
+
+        @media (min-width: 768px) {
             .header {
-                display: flex;
+                padding: 0 24px;
+            }
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            height: 32px;
+            width: auto;
+        }
+
+        @media (min-width: 768px) {
+            .logo {
+                height: 40px;
+            }
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #F0F0F0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .icon-btn:hover {
+            background-color: #E0E0E0;
+        }
+
+        .icon-btn img {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .icon-btn svg {
+            width: 20px;
+            height: 20px;
+            display: block;
+        }
+
+        .menu-dropdown {
+            position: absolute;
+            top: 60px;
+            right: 16px;
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: none;
+            min-width: 180px;
+            z-index: 1000;
+        }
+
+        @media (min-width: 768px) {
+            .menu-dropdown {
+                right: 24px;
+            }
+        }
+
+        .menu-item {
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--text-main);
+            text-decoration: none;
+            display: block;
+        }
+
+        .menu-item:hover {
+            background-color: #F8F8F8;
+        }
+
+        /* Banner responsive */
+        .banner {
+            position: relative;
+            height: 80px;
+            overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .banner {
+                height: 100px;
+            }
+        }
+
+        .banner-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: top;
+        }
+
+        .banner-content {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            max-width: 800px;
+            padding: 16px;
+            margin: 0 auto;
+        }
+
+        .banner-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 8px;
+        }
+
+        @media (min-width: 768px) {
+            .banner-title {
+                font-size: 36px;
+            }
+        }
+
+        /* Contenido principal */
+        .main-content {
+            flex: 1;
+            padding: 20px 16px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .main-content {
+                padding: 40px 20px;
+            }
+        }
+
+        /* Stats bar responsive */
+        .stats-bar {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--primary-pink);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        @media (min-width: 768px) {
+            .stats-bar {
+                flex-direction: row;
                 justify-content: space-between;
                 align-items: center;
-                padding: 0 24px;
-                height: 60px;
-                background-color: var(--white);
-                border-bottom: 1px solid var(--border-light);
-                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-                position: relative;
-                z-index: 100;
+                padding: 20px;
             }
-            .header-left { display: flex; align-items: center; gap: 16px; }
-            .logo { height: 40px; width: auto; }
-            
-            .header-right { 
-                display: flex; 
-                align-items: center; 
-                gap: 12px; /* Reducido de 16px a 12px */
-            }
-            
-            /* Contenedor de iconos - TAMAÑO CORRECTO */
-            .icon-btn {
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                background-color: #F0F0F0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                transition: background 0.2s;
-                flex-shrink: 0; /* Evita que se deformen */
-            }
-            .icon-btn:hover { background-color: #E0E0E0; }
-            
-            /* Iconos dentro del botón - TAMAÑO CORRECTO */
-            .icon-btn img {
-                width: 20px;
-                height: 20px;
-                object-fit: contain;
-                display: block;
-            }
-            
-            /* SVG dentro del botón - TAMAÑO CORRECTO */
-            .icon-btn svg {
-                width: 20px;
-                height: 20px;
-                display: block;
-            }
-            
-            .menu-dropdown {
-                position: absolute; top: 60px; right: 24px; background: white;
-                border: 1px solid var(--border-light); border-radius: 8px; 
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; min-width: 180px;
-                z-index: 1000;
-            }
-            .menu-item { 
-                padding: 10px 16px; font-size: 14px; color: var(--text-main); 
-                text-decoration: none; display: block; 
-            }
-            .menu-item:hover { background-color: #F8F8F8; }
-            
-            .banner {
-                position: relative; height: 100px; overflow: hidden;
-            }
-            .banner-image {
-                width: 100%; height: 100%; object-fit: cover; object-position: top;
-            }
-            .banner-content {
-                text-align: center; position: relative; z-index: 2;
-                max-width: 800px; padding: 20px; margin: 0 auto;
-            }
-            .banner-title {
-                font-size: 36px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;
-            }
-            .main-content {
-                flex: 1; padding: 40px 20px; max-width: 1400px; margin: 0 auto; width: 100%;
-            }
-            .stats-bar {
-                background: var(--white); border-radius: 12px; padding: 20px;
-                margin-bottom: 30px; border-left: 4px solid var(--primary-pink);
-                display: flex; justify-content: space-between; align-items: center;
-            }
+        }
+
+        .stats-number {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary-pink);
+        }
+
+        @media (min-width: 768px) {
             .stats-number {
-                font-size: 32px; font-weight: 700; color: var(--primary-pink);
+                font-size: 32px;
             }
+        }
+
+        .btn-primary {
+            background-color: var(--primary-cyan);
+            color: var(--text-main);
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s;
+            display: block;
+            text-align: center;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
             .btn-primary {
-                background-color: var(--primary-cyan); color: var(--text-main);
-                padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600;
-                cursor: pointer; text-decoration: none; transition: transform 0.2s;
+                display: inline-block;
+                width: auto;
+                padding: 10px 20px;
             }
-            .btn-primary:hover { transform: translateY(-2px); }
-            .btn-restore {
-                background-color: var(--primary-lime); color: #333;
-                padding: 6px 12px; border: none; border-radius: 4px; font-weight: 600;
-                cursor: pointer; margin-right: 5px;
-            }
-            .btn-delete-perm {
-                background-color: var(--primary-pink); color: white;
-                padding: 6px 12px; border: none; border-radius: 4px; font-weight: 600;
-                cursor: pointer;
-            }
-            table {
-                width: 100%; border-collapse: collapse; background: var(--white);
-                border: 1px solid var(--border-dark); box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-            }
-            th {
-                background-color: var(--primary-purple); /* CAMBIADO DE LIMA A MORADO */
-                font-weight: 700;
-                font-size: 14px;
-                padding: 12px;
-                text-align: center;
-                border: 1px solid var(--border-dark);
-                color: white; /* Texto blanco para mejor contraste */
-            }
-            td {
-                padding: 12px; border: 1px solid var(--border-dark); text-align: center;
-            }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            .badge-rol {
-                padding: 4px 8px; border-radius: 4px; font-weight: 600;
-            }
-            .badge-estudiante { background-color: var(--primary-cyan); color: white; }
-            .badge-docente { background-color: var(--primary-purple); color: white; }
-            .badge-representante { background-color: var(--primary-pink); color: white; }
-            .badge-admin { background-color: #333; color: white; }
-            .mensaje-exito {
-                background-color: var(--primary-lime); color: #333; padding: 15px;
-                border-radius: 8px; margin-bottom: 20px;
-            }
-            .mensaje-error {
-                background-color: #f8d7da; color: #721c24; padding: 15px;
-                border-radius: 8px; margin-bottom: 20px;
-            }
-            .footer {
-                height: 50px; background-color: var(--white); border-top: 1px solid var(--border-light);
-                display: flex; justify-content: space-between; align-items: center;
-                padding: 0 24px; font-size: 13px; color: var(--text-muted);
-                position: sticky; bottom: 0;
-            }
-            /* Modal de confirmación (EL MISMO QUE EN GESTIÓN DE USUARIOS) */
-            .modal {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0,0,0,0.5);
-                z-index: 2000;
-                justify-content: center;
-                align-items: center;
-            }
+        }
 
-            .modal-content {
-                background: white;
-                padding: 30px;
-                border-radius: 16px;
-                max-width: 400px;
-                text-align: center;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+        }
 
-            .modal-content h3 {
-                color: var(--primary-pink);
-                margin-bottom: 15px;
-                font-size: 24px;
-            }
+        /* Tabla responsive */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 0 -16px;
+            padding: 0 16px;
+        }
 
+        table {
+            width: 100%;
+            min-width: 800px;
+            border-collapse: collapse;
+            background: var(--white);
+            border: 1px solid var(--border-dark);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+        }
+
+        th {
+            background-color: var(--primary-purple);
+            font-weight: 700;
+            font-size: 13px;
+            padding: 12px;
+            text-align: center;
+            border: 1px solid var(--border-dark);
+            color: white;
+        }
+
+        td {
+            padding: 12px;
+            border: 1px solid var(--border-dark);
+            text-align: center;
+            font-size: 13px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        /* Badges de roles */
+        .badge-rol {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .badge-estudiante {
+            background-color: var(--primary-cyan);
+            color: white;
+        }
+
+        .badge-docente {
+            background-color: var(--primary-purple);
+            color: white;
+        }
+
+        .badge-representante {
+            background-color: var(--primary-pink);
+            color: white;
+        }
+
+        .badge-admin {
+            background-color: #333;
+            color: white;
+        }
+
+        /* Botones de acción */
+        .acciones-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        @media (min-width: 768px) {
+            .acciones-container {
+                flex-direction: row;
+                gap: 5px;
+            }
+        }
+
+        .btn-restore {
+            background-color: var(--primary-lime);
+            color: #333;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .btn-delete-perm {
+            background-color: var(--primary-pink);
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        @media (min-width: 768px) {
+            .btn-restore, .btn-delete-perm {
+                width: auto;
+                padding: 6px 12px;
+            }
+        }
+
+        /* Mensajes */
+        .mensaje-exito,
+        .mensaje-error {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .mensaje-exito {
+            background-color: var(--primary-lime);
+            color: #333;
+        }
+
+        .mensaje-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Modal responsive */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .modal-content h3 {
+            color: var(--primary-pink);
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        @media (min-width: 768px) {
             .modal-buttons {
-                display: flex;
+                flex-direction: row;
                 gap: 10px;
-                justify-content: center;
-                margin-top: 20px;
             }
+        }
 
-            .modal-btn-confirm {
-                background-color: var(--primary-pink);
-                color: white;
-                padding: 12px 25px;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 600;
-                transition: transform 0.2s;
-            }
+        .modal-btn-confirm {
+            background-color: var(--primary-pink);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            width: 100%;
+        }
 
-            .modal-btn-confirm:hover {
-                transform: translateY(-2px);
-                opacity: 0.9;
-            }
+        .modal-btn-cancel {
+            background-color: #ccc;
+            color: #333;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            width: 100%;
+        }
 
+        @media (min-width: 768px) {
+            .modal-btn-confirm,
             .modal-btn-cancel {
-                background-color: #ccc;
-                color: #333;
-                padding: 12px 25px;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 600;
-                transition: transform 0.2s;
+                width: auto;
             }
+        }
 
-            .modal-btn-cancel:hover {
-                transform: translateY(-2px);
-                background-color: #bbb;
+        .modal-btn-confirm:hover,
+        .modal-btn-cancel:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Footer */
+        .footer {
+            height: 50px;
+            background-color: var(--white);
+            border-top: 1px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+            position: sticky;
+            bottom: 0;
+        }
+
+        @media (min-width: 768px) {
+            .footer {
+                padding: 0 24px;
+                font-size: 13px;
             }
-        </style>
+        }
+    </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn"><img src="../../../assets/icon-bell.svg" alt="Notificaciones"></div>
-            <div class="icon-btn"><img src="../../../assets/icon-user.svg" alt="Perfil"></div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-            <div class="menu-dropdown" id="dropdown">
-                <a href="gestion_usuarios.php" class="menu-item">Gestión de Usuarios</a>
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
-
+    <?php require_once '../includes/header_comun.php'; ?>
     <div class="banner">
-        <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image">
+        <img src="../../../assets/banner-top.svg" alt="Banner" class="banner-image" onerror="this.style.display='none'">
     </div>
 
     <div class="banner-content">
-        <h1 class="banner-title">Papelera de Reciclaje</h1>
+        <h1 class="banner-title">🗑️ Papelera de Reciclaje</h1>
     </div>
 
     <main class="main-content">
@@ -475,69 +696,74 @@ $eliminados = $conexion->query("
             </div>
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Nombre</th>
-                    <th>Correo</th>
-                    <th>Rol</th>
-                    <th>Grado/Sec</th>
-                    <th>Eliminado por</th>
-                    <th>Fecha Eliminación</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (empty($eliminados)): ?>
+        <div class="table-responsive">
+            <table>
+                <thead>
                     <tr>
-                        <td colspan="8" style="text-align: center; padding: 40px;">
-                            La papelera está vacía
-                        </td>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Correo</th>
+                        <th>Rol</th>
+                        <th>Grado/Sec</th>
+                        <th>Eliminado por</th>
+                        <th>Fecha</th>
+                        <th>Acciones</th>
                     </tr>
-                <?php else: ?>
-                    <?php foreach ($eliminados as $e): ?>
-                    <tr>
-                        <td><?php echo $e['usuario_id']; ?></td>
-                        <td style="text-align: left;"><?php echo htmlspecialchars($e['nombre']); ?></td>
-                        <td style="text-align: left;"><?php echo htmlspecialchars($e['correo']); ?></td>
-                        <td>
-                            <span class="badge-rol 
-                                <?php 
-                                    if ($e['rol'] === 'Estudiante') echo 'badge-estudiante';
-                                    elseif ($e['rol'] === 'Docente') echo 'badge-docente';
-                                    elseif ($e['rol'] === 'Representante') echo 'badge-representante';
-                                    else echo 'badge-admin';
-                                ?>">
-                                <?php echo $e['rol']; ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php if ($e['grado']): ?>
-                                <?php echo $e['grado'] . ' - ' . $e['seccion']; ?>
-                            <?php else: ?>
-                                —
-                            <?php endif; ?>
-                        </td>
-                        <td><?php echo $e['eliminado_por_nombre'] ?? 'Desconocido'; ?></td>
-                        <td><?php echo date('d/m/Y H:i', strtotime($e['fecha_eliminacion'])); ?></td>
-                        <td>
-                            <button class="btn-restore" 
-                                    onclick="confirmarRestaurar(<?php echo $e['id']; ?>, '<?php echo addslashes(htmlspecialchars($e['nombre'])); ?>')">
-                                Restaurar
-                            </button>
-                            
-                            <button class="btn-delete-perm" 
-                                    onclick="confirmarEliminarPerm(<?php echo $e['id']; ?>, '<?php echo addslashes(htmlspecialchars($e['nombre'])); ?>')">
-                                Eliminar
-                            </button>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php if (empty($eliminados)): ?>
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 40px;">
+                                La papelera está vacía
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($eliminados as $e): ?>
+                        <tr>
+                            <td><?php echo $e['usuario_id']; ?></td>
+                            <td style="text-align: left;"><?php echo htmlspecialchars($e['nombre']); ?></td>
+                            <td style="text-align: left;"><?php echo htmlspecialchars($e['correo']); ?></td>
+                            <td>
+                                <span class="badge-rol 
+                                    <?php 
+                                        if ($e['rol'] === 'Estudiante') echo 'badge-estudiante';
+                                        elseif ($e['rol'] === 'Docente') echo 'badge-docente';
+                                        elseif ($e['rol'] === 'Representante') echo 'badge-representante';
+                                        else echo 'badge-admin';
+                                    ?>">
+                                    <?php echo $e['rol']; ?>
+                                </span>
+                            </td>
+                            <td>
+                                <?php if ($e['grado']): ?>
+                                    <?php echo $e['grado'] . ' - ' . $e['seccion']; ?>
+                                <?php else: ?>
+                                    —
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo $e['eliminado_por_nombre'] ?? 'Desconocido'; ?></td>
+                            <td><?php echo date('d/m/Y H:i', strtotime($e['fecha_eliminacion'])); ?></td>
+                            <td>
+                                <div class="acciones-container">
+                                    <button class="btn-restore" 
+                                            onclick="confirmarRestaurar(<?php echo $e['id']; ?>, '<?php echo addslashes(htmlspecialchars($e['nombre'])); ?>')">
+                                        ↪️ Restaurar
+                                    </button>
+                                    
+                                    <button class="btn-delete-perm" 
+                                            onclick="confirmarEliminarPerm(<?php echo $e['id']; ?>, '<?php echo addslashes(htmlspecialchars($e['nombre'])); ?>')">
+                                        🗑️ Eliminar
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </main>
+
     <!-- Modal de confirmación para RESTAURAR -->
     <div class="modal" id="modalRestaurar">
         <div class="modal-content">
@@ -565,7 +791,7 @@ $eliminados = $conexion->query("
             <h3>🗑️ Confirmar Eliminación Permanente</h3>
             <p id="modal-mensaje-eliminar">¿Estás seguro de que deseas eliminar permanentemente este usuario?</p>
             <p style="font-size: 12px; color: #999; margin-top: 10px; margin-bottom: 15px;">
-                Esta acción no se puede deshacer. El usuario se eliminará para siempre.
+                Esta acción no se puede deshacer.
             </p>
             
             <form method="POST" id="formEliminarPerm">
@@ -586,7 +812,9 @@ $eliminados = $conexion->query("
     </footer>
 
     <script>
-        document.getElementById('menu-toggle').addEventListener('click', function() {
+        // Toggle menú hamburguesa
+        document.getElementById('menu-toggle').addEventListener('click', function(e) {
+            e.stopPropagation();
             const dropdown = document.getElementById('dropdown');
             dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
         });
@@ -598,6 +826,7 @@ $eliminados = $conexion->query("
                 dropdown.style.display = 'none';
             }
         });
+
         // Modal de confirmación para RESTAURAR
         function confirmarRestaurar(id, nombre) {
             document.getElementById('restaurar_id').value = id;
@@ -620,7 +849,7 @@ $eliminados = $conexion->query("
             document.getElementById('modalEliminarPerm').style.display = 'none';
         }
 
-        // Cerrar modales si se hace clic fuera de ellos
+        // Cerrar modales si se hace clic fuera
         window.onclick = function(event) {
             const modalRestaurar = document.getElementById('modalRestaurar');
             const modalEliminar = document.getElementById('modalEliminarPerm');

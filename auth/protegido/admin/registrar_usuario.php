@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php'; 
+require_once '../includes/onesignal_config.php';
 // Verificación de sesión
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Administrador') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -49,10 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Validaciones básicas
         if (empty($nombre)) throw new Exception('El nombre es obligatorio.');
         if (empty($correo) || !filter_var($correo, FILTER_VALIDATE_EMAIL)) throw new Exception('El correo es inválido.');
-        if (empty($telefono)) throw new Exception('El número de teléfono es obligatorio.'); 
-        if (!preg_match('/^\+58\s\d{9,10}$/', $telefono)) {
-            throw new Exception('El teléfono debe tener formato: +58 4121234567 (con espacio después de +58 y 9-10 dígitos).');
-        }
+
         if (empty($rol)) throw new Exception('El rol es obligatorio.');
         if (!in_array($rol, ['Administrador', 'Docente', 'Estudiante', 'Representante'])) throw new Exception('Rol no válido.');
         // ✅ NUEVA VALIDACIÓN PARA DOCENTE
@@ -85,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Tabla principal
         $stmt = $pdo->prepare("
-            INSERT INTO usuarios (nombre, correo, contrasena, contrasena_temporal, rol, activo, telefono)
-            VALUES (:nombre, :correo, :contrasena, :contrasena_temporal, :rol, :activo, :telefono)
+            INSERT INTO usuarios (nombre, correo, contrasena, contrasena_temporal, rol, activo)
+            VALUES (:nombre, :correo, :contrasena, :contrasena_temporal, :rol, :activo)
             RETURNING id
         ");
         $stmt->execute([
@@ -96,7 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':contrasena_temporal' => $contrasena_plana, 
             ':rol' => $rol,
             ':activo' => !empty($_POST['activo']),
-            ':telefono' => $telefono
         ]);
         $usuario_id = $stmt->fetchColumn();
 
@@ -167,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registrar Usuario - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -547,31 +545,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 
-    <!--Encabezado -->
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <!-- Campana-->
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
-                </svg>
-            </div>
-            <div class="icon-btn">
-                <!--Perfil -->
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <!--Menú-->
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                    <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <!--Banner -->
     <div class="banner">
@@ -635,10 +609,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="telefono">Teléfono *</label>
-                    <input type="tel" id="telefono" name="telefono" class="form-control" placeholder="+58..." required>
-                </div>
+            
                 <div class="form-group">
                     <label for="contrasena">Contraseña</label>
                     <input type="text" id="contrasena" name="contrasena" class="form-control"

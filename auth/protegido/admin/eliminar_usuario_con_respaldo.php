@@ -118,12 +118,12 @@ try {
     $stmt_insert = $pdo->prepare("
         INSERT INTO usuarios_eliminados (
             usuario_id, nombre, correo, contrasena, contrasena_temporal,
-            rol, telefono, grado, seccion,
+            rol, grado, seccion,
             estudiantes_asignados,
             representantes_asignados, eliminado_por, backup_completo
         ) VALUES (
             :usuario_id, :nombre, :correo, :contrasena, :contrasena_temporal,
-            :rol, :telefono, :grado, :seccion,
+            :rol, :grado, :seccion,
             :estudiantes_asignados,
             :representantes_asignados, :eliminado_por, :backup_completo
         )
@@ -147,7 +147,6 @@ try {
         ':contrasena' => $usuario['contrasena'],
         ':contrasena_temporal' => $usuario['contrasena_temporal'],
         ':rol' => $usuario['rol'],
-        ':telefono' => $usuario['telefono'],
         ':grado' => $grado,
         ':seccion' => $seccion,
         ':estudiantes_asignados' => $estudiantes_asignados,

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../../funciones.php';
+require_once '../includes/onesignal_config.php';
 
 if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     header('Location: ../../login.php?error=Acceso+no+autorizado.');
@@ -15,6 +16,8 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Estudiante - SIEDUCRES</title>
     <?php require_once '../includes/favicon.php'; ?>
+    <?php require_once '../includes/header_onesignal.php'; ?> 
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -258,30 +261,10 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
     </style>
 </head>
 <body>
+    <div style="height: 60px; width: 100%; background: transparent;"></div>
 
     <!-- Encabezado -->
-    <header class="header">
-        <div class="header-left">
-            <img src="../../../assets/logo.svg" alt="SIEDUCRES" class="logo">
-        </div>
-        <div class="header-right">
-            <div class="icon-btn">
-                <img src="../../../assets/icon-bell.svg" alt="Notificaciones">
-            </div>
-            <div class="icon-btn">
-                <img src="../../../assets/icon-user.svg" alt="Perfil">
-            </div>
-            <div class="icon-btn" id="menu-toggle">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#333333">
-                   <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                </svg>
-            </div>
-
-            <div class="menu-dropdown" id="dropdown">
-                <a href="../../logout.php" class="menu-item">Cerrar sesión</a>
-            </div>
-        </div>
-    </header>
+    <?php require_once '../includes/header_comun.php'; ?>
 
     <!-- Banner -->
     <div class="banner">
@@ -334,7 +317,7 @@ if (!sesionActiva() || $_SESSION['usuario_rol'] !== 'Estudiante') {
                     <img src="../../../assets/encuestas.svg" alt="Encuestas">
                 </div>
                 <h2 class="card-title">Encuestas</h2>
-                <p class="card-desc">Responder encuestas de satisfacción</p>
+                
             </a>
             <!-- Tarjeta para Mi Historial -->
             <a href="../comun/reportes.php" class="card card-6">
